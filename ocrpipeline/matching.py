@@ -1,0 +1,425 @@
+"""
+Stage 4: Matching (reference-based)
+====================================
+Assignment problem, not clustering.
+
+Domain assumption (provided by the user):
+    The first image contains the complete inventory of components.
+    Subsequent images contain SUBSETS of that inventory, possibly mixed
+    with out-of-inventory items (syringes, filters, etc.) that should
+    NOT be matched to any reference slot.
+
+So matching becomes: for each subsequent image, assign each detection
+to either (a) one of the reference slots from image 1, or (b) "out of
+inventory". Two detections in the same subsequent image must not claim
+the same reference slot — when image 1 has duplicates (e.g., three
+identical Pfizer vials) and a subsequent image shows two of them, each
+should map to a different slot.
+
+This is exactly the bipartite assignment problem, solved optimally by
+the Hungarian algorithm (scipy.optimize.linear_sum_assignment).
+
+Output:
+    A ReferenceMatch result with:
+        - slot definitions (one per image-1 detection)
+        - per-image assignments (which slot each detection maps to)
+        - missing slots per subsequent image
+        - out-of-inventory detections per subsequent image
+        - per-image and overall completeness counts
+"""
+
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from typing import Sequence
+
+import numpy as np
+from scipy.optimize import linear_sum_assignment
+
+from detection import Detection
+from embedding import cosine_similarity_matrix
+from ocr import OCRFields
+
+
+# Score weights for the hybrid match metric. Same weights as the previous
+# clustering version — they balance visual similarity against the textual
+# evidence from OCR.
+W_VISUAL = 0.40
+W_LOT = 0.35
+W_NDC = 0.20
+W_EXP = 0.05
+
+# Minimum score for a subsequent detection to be assigned to a reference
+# slot. Below this, the detection is classified as out-of-inventory.
+# 0.45 is conservative — it lets visual-similarity-only matches through
+# (visual=1.0 alone scores 0.40, plus partial text agreement gets it over
+# the threshold) but rejects clearly-different objects.
+ASSIGNMENT_THRESHOLD = 0.45
+
+# Above this visual-only floor, lot-number agreement alone is sufficient
+# evidence to assign even when other text fields disagree or are missing.
+# Useful when OCR partially fails on one side of the comparison.
+VISUAL_FLOOR_FOR_LOT_OVERRIDE = 0.55
+
+
+@dataclass
+class ReferenceSlot:
+    """One unique inventory item, defined by an image-1 detection."""
+
+    slot_id: int
+    reference_detection_id: int  # the image-1 Detection.instance_id
+    class_label: str | None
+    lot: str | None
+    ndc: str | None
+    exp: str | None
+
+    def describe(self) -> str:
+        """Short human-readable summary of what's in this slot."""
+        parts = [self.class_label or "object"]
+        if self.lot:
+            parts.append(f"lot={self.lot}")
+        if self.ndc:
+            parts.append(f"ndc={self.ndc}")
+        return " ".join(parts)
+
+
+@dataclass
+class Assignment:
+    """One subsequent-image detection's assignment outcome."""
+
+    detection_id: int  # global instance_id of the subsequent detection
+    source_image: str
+    slot_id: int | None  # None means out-of-inventory
+    score: float  # the hybrid match score that drove the assignment
+
+
+@dataclass
+class ImageReport:
+    """Per-image breakdown of what was found vs. what was expected."""
+
+    source_image: str
+    is_reference: bool
+    detection_count: int
+    assigned_count: int = 0  # detections that mapped to a reference slot
+    out_of_inventory_count: int = 0  # detections with no good slot match
+    missing_slot_ids: list[int] = field(default_factory=list)
+    matched_slot_ids: list[int] = field(default_factory=list)
+
+
+@dataclass
+class ReferenceMatch:
+    """Full output of reference-based matching."""
+
+    slots: list[ReferenceSlot]
+    assignments: list[Assignment]
+    image_reports: list[ImageReport]
+
+    def slot_by_id(self, slot_id: int) -> ReferenceSlot:
+        return self.slots[slot_id]
+
+    def report_for_image(self, source_image: str) -> ImageReport | None:
+        for r in self.image_reports:
+            if r.source_image == source_image:
+                return r
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Pair scoring (same logic as before, factored out for reuse)
+# ---------------------------------------------------------------------------
+
+
+def _pair_score(
+    visual_sim: float,
+    fields_a: OCRFields,
+    fields_b: OCRFields,
+) -> tuple[float, dict[str, bool]]:
+    """Hybrid match score between two detections."""
+    lot_match = bool(
+        fields_a.lot and fields_b.lot and fields_a.lot == fields_b.lot
+    )
+    ndc_match = bool(
+        fields_a.ndc and fields_b.ndc and fields_a.ndc == fields_b.ndc
+    )
+    exp_match = bool(
+        fields_a.exp and fields_b.exp and fields_a.exp == fields_b.exp
+    )
+
+    score = (
+        W_VISUAL * visual_sim
+        + W_LOT * (1.0 if lot_match else 0.0)
+        + W_NDC * (1.0 if ndc_match else 0.0)
+        + W_EXP * (1.0 if exp_match else 0.0)
+    )
+    return score, {"lot": lot_match, "ndc": ndc_match, "exp": exp_match}
+
+
+def _build_score_matrix(
+    sub_indices: Sequence[int],
+    ref_indices: Sequence[int],
+    embeddings: np.ndarray,
+    field_records: Sequence[OCRFields],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build the score and visual-similarity matrices for one subsequent image.
+
+    Returns (scores, visual_sims), each shape [n_sub, n_ref].
+    """
+    n_sub = len(sub_indices)
+    n_ref = len(ref_indices)
+    scores = np.zeros((n_sub, n_ref), dtype=np.float64)
+    visual_sims = np.zeros((n_sub, n_ref), dtype=np.float64)
+
+    # Compute visual similarities in one batched dot-product. Both blocks of
+    # embeddings are L2-normalized rows, so the matrix product gives cosine
+    # similarities directly.
+    if n_sub > 0 and n_ref > 0:
+        sub_embs = embeddings[list(sub_indices)]
+        ref_embs = embeddings[list(ref_indices)]
+        visual_sims = sub_embs @ ref_embs.T
+
+    for i, sub_i in enumerate(sub_indices):
+        for j, ref_j in enumerate(ref_indices):
+            score, _ = _pair_score(
+                visual_sims[i, j], field_records[sub_i], field_records[ref_j]
+            )
+            scores[i, j] = score
+
+    return scores, visual_sims
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
+def match_against_reference(
+    detections: Sequence[Detection],
+    embeddings: np.ndarray,
+    field_records: Sequence[OCRFields],
+    reference_image: str,
+    threshold: float = ASSIGNMENT_THRESHOLD,
+) -> ReferenceMatch:
+    """Assign every subsequent detection to a reference slot, or to out-of-inventory.
+
+    Args:
+        detections: All detections across all images, with global instance_ids.
+        embeddings: [N, D] L2-normalized embeddings, aligned to detections.
+        field_records: OCR fields, aligned to detections.
+        reference_image: Path of the image whose detections define the inventory.
+            Typically the first image in the batch.
+        threshold: Minimum score to count as a valid slot assignment.
+
+    Returns:
+        ReferenceMatch with slots, per-detection assignments, and per-image reports.
+    """
+    n = len(detections)
+    assert len(field_records) == n
+    assert embeddings.shape[0] == n
+
+    # Group detection indices by source image, preserving original order.
+    by_image: dict[str, list[int]] = defaultdict(list)
+    image_order: list[str] = []
+    for i, det in enumerate(detections):
+        if det.source_image not in by_image:
+            image_order.append(det.source_image)
+        by_image[det.source_image].append(i)
+
+    if reference_image not in by_image:
+        raise ValueError(
+            f"reference_image {reference_image!r} has no detections; "
+            f"known images: {list(by_image)}"
+        )
+
+    # 1. Build reference slots from image-1 detections.
+    ref_indices = by_image[reference_image]
+    slots: list[ReferenceSlot] = []
+    for slot_id, det_idx in enumerate(ref_indices):
+        det = detections[det_idx]
+        f = field_records[det_idx]
+        slots.append(
+            ReferenceSlot(
+                slot_id=slot_id,
+                reference_detection_id=det.instance_id,
+                class_label=det.class_label,
+                lot=f.lot,
+                ndc=f.ndc,
+                exp=f.exp,
+            )
+        )
+
+    # 2. Reference image: every detection trivially "assigned" to its own slot.
+    assignments: list[Assignment] = []
+    image_reports: list[ImageReport] = []
+
+    ref_report = ImageReport(
+        source_image=reference_image,
+        is_reference=True,
+        detection_count=len(ref_indices),
+        assigned_count=len(ref_indices),
+        matched_slot_ids=list(range(len(slots))),
+    )
+    for slot_id, det_idx in enumerate(ref_indices):
+        assignments.append(
+            Assignment(
+                detection_id=detections[det_idx].instance_id,
+                source_image=reference_image,
+                slot_id=slot_id,
+                score=1.0,  # self-match
+            )
+        )
+    image_reports.append(ref_report)
+
+    # 3. For each subsequent image, solve the assignment problem.
+    for img in image_order:
+        if img == reference_image:
+            continue
+        sub_indices = by_image[img]
+        report = _assign_one_image(
+            img, sub_indices, ref_indices, slots, detections,
+            embeddings, field_records, threshold, assignments,
+        )
+        image_reports.append(report)
+
+    # Restore image_reports to image_order.
+    image_reports.sort(key=lambda r: image_order.index(r.source_image))
+
+    return ReferenceMatch(slots=slots, assignments=assignments, image_reports=image_reports)
+
+
+def _assign_one_image(
+    image: str,
+    sub_indices: list[int],
+    ref_indices: list[int],
+    slots: list[ReferenceSlot],
+    detections: Sequence[Detection],
+    embeddings: np.ndarray,
+    field_records: Sequence[OCRFields],
+    threshold: float,
+    assignments_out: list[Assignment],
+) -> ImageReport:
+    """Run Hungarian assignment for one subsequent image. Appends to assignments_out."""
+    n_sub = len(sub_indices)
+    n_ref = len(ref_indices)
+    report = ImageReport(
+        source_image=image,
+        is_reference=False,
+        detection_count=n_sub,
+    )
+
+    if n_sub == 0:
+        report.missing_slot_ids = list(range(n_ref))
+        return report
+
+    scores, visual_sims = _build_score_matrix(
+        sub_indices, ref_indices, embeddings, field_records
+    )
+
+    # Lot-override boost: if a (sub, ref) pair shares a lot number AND has
+    # decent visual similarity, lift its score to ensure the assignment
+    # picks it even if other channels are missing.
+    for i, sub_i in enumerate(sub_indices):
+        for j, ref_j in enumerate(ref_indices):
+            f_sub = field_records[sub_i]
+            f_ref = field_records[ref_j]
+            if (
+                f_sub.lot
+                and f_ref.lot
+                and f_sub.lot == f_ref.lot
+                and visual_sims[i, j] >= VISUAL_FLOOR_FOR_LOT_OVERRIDE
+            ):
+                # Force this pair above threshold so the Hungarian solver
+                # treats it as a strong preference. Don't pin to a constant
+                # because we still want differential scoring among multiple
+                # lot-matched pairs (visual sim breaks ties).
+                scores[i, j] = max(scores[i, j], threshold + 0.10 + 0.1 * visual_sims[i, j])
+
+    # Hungarian solver minimizes cost; we want to maximize score.
+    # Pad the score matrix to be square (Hungarian needs square cost matrices
+    # in many implementations; scipy handles rectangular, but we still need
+    # to handle the n_sub > n_ref case where some detections must be unassigned).
+    # scipy's linear_sum_assignment handles rectangular matrices and returns
+    # min(n_sub, n_ref) pairs.
+    cost = -scores  # negate to convert max-score to min-cost
+    row_ind, col_ind = linear_sum_assignment(cost)
+
+    matched_slots: set[int] = set()
+    matched_subs: set[int] = set()
+
+    for r, c in zip(row_ind, col_ind):
+        score = scores[r, c]
+        sub_global_idx = sub_indices[r]
+        slot_id = c  # ref_indices index == slot_id by construction
+        if score >= threshold:
+            assignments_out.append(
+                Assignment(
+                    detection_id=detections[sub_global_idx].instance_id,
+                    source_image=image,
+                    slot_id=slot_id,
+                    score=float(score),
+                )
+            )
+            matched_slots.add(slot_id)
+            matched_subs.add(r)
+            report.assigned_count += 1
+            report.matched_slot_ids.append(slot_id)
+
+    # Any sub detection not in matched_subs is out-of-inventory.
+    # Record its best-attempted score so a human reviewer can see how close
+    # it came (helpful for tuning the threshold).
+    for r, sub_global_idx in enumerate(sub_indices):
+        if r in matched_subs:
+            continue
+        # Best score this detection achieved against any slot, even if below threshold.
+        best_score = float(scores[r].max()) if scores.shape[1] > 0 else 0.0
+        assignments_out.append(
+            Assignment(
+                detection_id=detections[sub_global_idx].instance_id,
+                source_image=image,
+                slot_id=None,
+                score=best_score,
+            )
+        )
+        report.out_of_inventory_count += 1
+
+    # Any slot not in matched_slots is missing from this image.
+    report.missing_slot_ids = [s for s in range(n_ref) if s not in matched_slots]
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Reporting helpers
+# ---------------------------------------------------------------------------
+
+
+def summarize(match: ReferenceMatch) -> dict:
+    """Quick stats useful for human-readable reports or JSON output."""
+    n_slots = len(match.slots)
+    out: dict = {
+        "n_reference_slots": n_slots,
+        "per_image": [],
+    }
+    # Group slots by their describe() string to surface duplicate inventory items.
+    desc_counts = Counter(s.describe() for s in match.slots)
+    out["inventory_grouped"] = [
+        {"description": desc, "count": cnt} for desc, cnt in desc_counts.most_common()
+    ]
+    for report in match.image_reports:
+        entry = {
+            "image": report.source_image,
+            "is_reference": report.is_reference,
+            "detections": report.detection_count,
+            "assigned": report.assigned_count,
+            "out_of_inventory": report.out_of_inventory_count,
+            "missing_slot_count": len(report.missing_slot_ids),
+        }
+        if report.missing_slot_ids and not report.is_reference:
+            entry["missing_slots"] = [
+                {
+                    "slot_id": sid,
+                    "description": match.slots[sid].describe(),
+                }
+                for sid in report.missing_slot_ids
+            ]
+        out["per_image"].append(entry)
+    return out
