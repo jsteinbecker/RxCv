@@ -1,0 +1,358 @@
+{
+  "segmentation": {
+    "method": "watershed"
+  },
+  "images": [
+    {
+      "image_index": 1,
+      "path": "/Users/jts/Documents/ocr-rx1.png",
+      "components": [
+        {
+          "image_index": 1,
+          "component_index": 1,
+          "bbox_xyxy": [
+            962,
+            557,
+            1081,
+            700
+          ],
+          "crop_path": "output/2026-05-05_0119/img1_component_01.png",
+          "component_type": "bag",
+          "text": "LOT K250250\nEXP 09/26\n2mL",
+          "best_rotation": 90,
+          "best_deskew": -0.0,
+          "best_psm": 3,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 92.8,
+          "tokens": [
+            "k250250",
+            "09",
+            "26",
+            "2ml"
+          ],
+          "product": null,
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": null,
+          "lot": "K250250",
+          "expiration": "09/26",
+          "volume_ml": "2",
+          "strength": null,
+          "aspect_ratio": 0.8321678321678322,
+          "area": 17017
+        }
+      ]
+    },
+    {
+      "image_index": 2,
+      "path": "/Users/jts/Documents/ocr-rx2.png",
+      "components": [
+        {
+          "image_index": 2,
+          "component_index": 1,
+          "bbox_xyxy": [
+            2,
+            250,
+            274,
+            585
+          ],
+          "crop_path": "output/2026-05-05_0119/img2_component_01.png",
+          "component_type": "bag",
+          "text": "Thiamine\n200mg/2mL\nfor Injection\nNDC 04001-0243-01",
+          "best_rotation": 90,
+          "best_deskew": -0.0,
+          "best_psm": 3,
+          "best_preprocess": "inv_otsu",
+          "ocr_confidence": 91.5,
+          "tokens": [
+            "thiamine",
+            "200mg",
+            "2ml",
+            "04001",
+            "0243",
+            "01"
+          ],
+          "product": "Thiamine HCl Injection",
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": "04001-0243-01",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": "2",
+          "strength": "200 mg/2 mL",
+          "aspect_ratio": 0.8119402985074626,
+          "area": 91120
+        },
+        {
+          "image_index": 2,
+          "component_index": 2,
+          "bbox_xyxy": [
+            194,
+            263,
+            434,
+            676
+          ],
+          "crop_path": "output/2026-05-05_0119/img2_component_02.png",
+          "component_type": "vial",
+          "text": "Th\n20\nfor",
+          "best_rotation": 0,
+          "best_deskew": -5.0,
+          "best_psm": 4,
+          "best_preprocess": "inv_otsu",
+          "ocr_confidence": 96.0,
+          "tokens": [
+            "th",
+            "20"
+          ],
+          "product": null,
+          "manufacturer": "Dr. Reddy's",
+          "manufacturer_source": "name",
+          "ndc": null,
+          "lot": null,
+          "expiration": null,
+          "volume_ml": null,
+          "strength": null,
+          "aspect_ratio": 0.5811138014527845,
+          "area": 99120
+        },
+        {
+          "image_index": 2,
+          "component_index": 3,
+          "bbox_xyxy": [
+            211,
+            0,
+            425,
+            285
+          ],
+          "crop_path": "output/2026-05-05_0119/img2_component_03.png",
+          "component_type": "vial",
+          "text": "a ene\nnw hy\n7 te roe\n\u2014\n\u2018| |\n\\ \u2014\n\u2014 a\u201c =\n\u2014\u2014\u2014 .\ni { (\n\\ \\ _\u2014\n\\ : ' /\n- \u201cud\n4 t i",
+          "best_rotation": 0,
+          "best_deskew": 6.0,
+          "best_psm": 6,
+          "best_preprocess": "adaptive",
+          "ocr_confidence": 45.0,
+          "tokens": [
+            "ene",
+            "nw",
+            "hy",
+            "te",
+            "roe",
+            "ud"
+          ],
+          "product": null,
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": null,
+          "lot": null,
+          "expiration": null,
+          "volume_ml": null,
+          "strength": null,
+          "aspect_ratio": 0.7508771929824561,
+          "area": 60990
+        },
+        {
+          "image_index": 2,
+          "component_index": 4,
+          "bbox_xyxy": [
+            374,
+            250,
+            645,
+            585
+          ],
+          "crop_path": "output/2026-05-05_0119/img2_component_04.png",
+          "component_type": "bag",
+          "text": "Thiamine\n200mg/2mL\nfor Injection\nNDC 04001-0243-01",
+          "best_rotation": 90,
+          "best_deskew": -0.0,
+          "best_psm": 3,
+          "best_preprocess": "inv_otsu",
+          "ocr_confidence": 93.66666666666667,
+          "tokens": [
+            "thiamine",
+            "200mg",
+            "2ml",
+            "04001",
+            "0243",
+            "01"
+          ],
+          "product": "Thiamine HCl Injection",
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": "04001-0243-01",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": "2",
+          "strength": "200 mg/2 mL",
+          "aspect_ratio": 0.808955223880597,
+          "area": 90785
+        }
+      ]
+    }
+  ],
+  "linkage": {
+    "equiv_classes_image1": [
+      {
+        "image_index": 1,
+        "member_indices": [
+          1
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": null,
+        "lot": "K250250",
+        "expiration": "09/26",
+        "manufacturer": null,
+        "product": null,
+        "strength": null,
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      }
+    ],
+    "equiv_classes_image2": [
+      {
+        "image_index": 2,
+        "member_indices": [
+          1
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "04001-0243-01",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": null,
+        "product": "Thiamine HCl Injection",
+        "strength": "200 mg/2 mL",
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 2,
+        "member_indices": [
+          2
+        ],
+        "member_types": [
+          "vial"
+        ],
+        "ndc": null,
+        "lot": null,
+        "expiration": null,
+        "manufacturer": "Dr. Reddy's",
+        "product": null,
+        "strength": null,
+        "volume_ml": null,
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 2,
+        "member_indices": [
+          3
+        ],
+        "member_types": [
+          "vial"
+        ],
+        "ndc": null,
+        "lot": null,
+        "expiration": null,
+        "manufacturer": null,
+        "product": null,
+        "strength": null,
+        "volume_ml": null,
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 2,
+        "member_indices": [
+          4
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "04001-0243-01",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": null,
+        "product": "Thiamine HCl Injection",
+        "strength": "200 mg/2 mL",
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      }
+    ],
+    "within_image_relations": {
+      "image1": [],
+      "image2": [
+        {
+          "image_index": 2,
+          "class_a_id": 0,
+          "class_b_id": 3,
+          "class_a_components": [
+            1
+          ],
+          "class_b_components": [
+            4
+          ],
+          "tier": "sku",
+          "confidence": "high",
+          "shared_fields": [
+            "ndc",
+            "product",
+            "strength",
+            "volume_ml"
+          ],
+          "notes": null
+        }
+      ]
+    },
+    "links_by_tier": {
+      "identity": [],
+      "sku": [],
+      "therapeutic": []
+    },
+    "unmatched_image1": [
+      {
+        "image_index": 1,
+        "class_id": 0,
+        "component_indices": [
+          1
+        ],
+        "reason": "no_candidate"
+      }
+    ],
+    "unmatched_image2": [
+      {
+        "image_index": 2,
+        "class_id": 0,
+        "component_indices": [
+          1
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 2,
+        "class_id": 1,
+        "component_indices": [
+          2
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 2,
+        "class_id": 2,
+        "component_indices": [
+          3
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 2,
+        "class_id": 3,
+        "component_indices": [
+          4
+        ],
+        "reason": "no_candidate"
+      }
+    ]
+  }
+}

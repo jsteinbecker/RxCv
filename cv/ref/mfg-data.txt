@@ -1,0 +1,106 @@
+Pfizer [Pfizer Inc, Pfizer Laboratories, Pfizer Consumer Healthcare] : 00069, 00071, 00009, 60793, 00025
+Hospira [Pfizer] : 00409, 61703
+AbbVie : 00074, 00032, 00051, 65726
+Abbott Laboratories : 00074
+Merck [Merck & Co, Merck Sharp & Dohme, MSD] : 00006, 00085, 00781
+Johnson & Johnson [Janssen, Janssen Pharmaceuticals, Ortho-McNeil] : 50458, 59676, 00045, 00062
+Bristol-Myers Squibb [BMS, E.R. Squibb & Sons] : 00003, 00087, 00015
+Eli Lilly [Lilly] : 00002, 00110
+GlaxoSmithKline [GSK, Glaxo, SmithKline Beecham] : 00173, 00007, 00029, 00078
+Novartis [Novartis Pharmaceuticals] : 00078, 00083
+AstraZeneca [Zeneca] : 00310, 00186, 00456
+Sanofi [Sanofi-Aventis, Aventis, Genzyme] : 00024, 00088, 00075, 00220
+Roche [Genentech, Hoffmann-La Roche] : 50242, 00004, 00088
+Bayer [Bayer HealthCare, Bayer HealthCare Pharmaceuticals] : 00280, 50419, 11523
+Boehringer Ingelheim [BI, Boehringer Ingelheim Pharmaceuticals] : 00597, 00012
+Takeda [Takeda Pharmaceuticals America, Shire, Baxalta US] : 64764, 54092, 00300
+Amgen : 55513, 00591
+Gilead Sciences : 61958
+Regeneron : 61755
+Biogen [Biogen Idec] : 64406
+Vertex Pharmaceuticals : 51167
+Baxter [Baxter Healthcare, Baxter Laboratories, Baxter Healthcare Corperation] : 00338, 00641, 60977
+B. Braun [B. Braun Medical] : 00264
+ICU Medical : 00990, 60977
+Fresenius Kabi [Fresenius Kabi USA, APP Pharmaceuticals] : 63323, 76045
+American Regent [Daiichi Sankyo] : 00517
+Hikma [Hikma Pharmaceuticals USA, West-Ward, Roxane] : 00054, 00143, 00641, 60505
+Pfizer Injectables [Pharmacia, Pharmacia & Upjohn] : 00009, 00013
+Eagle Pharmaceuticals : 42367
+Endo USA [Par Pharmaceutical, Par Sterile Products, Endo Pharmaceuticals] : 00603, 42023, 60951
+Amphastar Pharmaceuticals [International Medication Systems, IMS] : 00548, 76329
+Lannett Company : 00527
+Mylan Institutional [Viatris] : 67457
+Athenex Pharmaceutical Division : 70860
+Nexus Pharmaceuticals : 70954
+Exela Pharma Sciences : 51754
+WG Critical Care : 44567
+Auromedics Pharma [Aurobindo] : 55150
+Slate Run Pharmaceuticals : 70771
+Teva [Teva Pharmaceuticals USA, Actavis Pharma, IVAX, Watson] : 00093, 00591, 00172, 45963, 52544
+Sandoz [Novartis Generics, Eon Labs, Geneva Pharmaceuticals] : 00781, 66758, 00185
+Sun Pharmaceutical [Sun Pharma, Sun Pharmaceuticals Industries, Caraco, Taro] : 47335, 10631, 51672, 57664
+Dr. Reddy's [Dr. Reddy's Laboratories, Promius Pharma, Dr. Reddy, Dr Reddy] : 55111, 43598
+Aurobindo Pharma USA : 65862, 13107, 59651
+Lupin Pharmaceuticals : 68180
+Cipla USA : 69097
+Amneal Pharmaceuticals [Impax] : 65162, 00115, 00228, 60505
+Apotex Corp : 60505
+Glenmark Pharmaceuticals : 68462
+Zydus Pharmaceuticals USA : 68382, 70710
+Hetero USA [Camber Pharmaceuticals] : 31722
+Alembic Pharmaceuticals : 46708, 62332
+Mylan Pharmaceuticals [Viatris] : 00378, 51079, 67877
+Viatris [Mylan, Upjohn] : 49502, 00378, 67877
+Rising Pharmaceuticals [Rising Health, Acetris] : 64980
+Bionpharma : 69452
+Breckenridge Pharmaceutical : 51991
+ANI Pharmaceuticals [Cody Labs] : 62559, 00093
+Cosette Pharmaceuticals [G&W Labs] : 00713
+Sun Pharma Industries : 62756
+Macleods Pharmaceuticals USA : 33342
+KVK-Tech : 10702
+Ascend Laboratories : 67877
+Padagis [Perrigo Rx] : 00574, 45802
+Perrigo [L. Perrigo Company] : 00574, 45802, 00113
+CSL Behring : 00053, 44206
+Grifols : 13533, 61953, 68516
+Octapharma : 67467
+Alexion Pharmaceuticals : 25682
+Alnylam Pharmaceuticals : 71336
+Jazz Pharmaceuticals : 68727
+BioMarin Pharmaceutical : 68135
+Otsuka America Pharmaceutical : 59148
+Daiichi Sankyo : 65597
+Astellas Pharma US : 00469
+Chiesi USA [Cornerstone Therapeutics] : 00270, 71225
+Mallinckrodt [Mallinckrodt Pharmaceuticals, ARD, Specialty Generics] : 00406, 67457, 00121
+Indivior : 12496
+Purdue Pharma : 59011
+Acadia Pharmaceuticals : 63090
+Pharmacyclics [AbbVie] : 57962
+Sumitomo Pharma America [Sunovion] : 63402
+GE Healthcare : 00407
+Lantheus Medical Imaging : 11994
+Bracco Diagnostics : 00270
+Galderma Laboratories : 00299
+Bausch & Lomb [Salix, Valeant] : 24208, 65649, 00187
+Alcon Laboratories : 00065
+Allergan [AbbVie] : 00023, 11933
+EMD Serono [Merck KGaA] : 44087
+Novo Nordisk : 00169
+Cardinal Health : 55154, 50436, 55289
+McKesson Packaging Services : 63629, 00904
+A-S Medication Solutions : 50090
+Bryant Ranch Prepack : 63629, 71335, 72162
+Aphena Pharma Solutions : 71610, 43353
+Direct Rx : 61919
+NuCare Pharmaceuticals : 68071
+Major Pharmaceuticals [Harvard Drug Group] : 00904
+RedPharm Drug : 67296
+Rebel Distributors : 21695
+PD-Rx Pharmaceuticals : 43063, 55289
+Proficient Rx : 71205
+Lake Erie Medical : 49999
+Preferred Pharmaceuticals : 68788
+American Health Packaging : 60687, 68084

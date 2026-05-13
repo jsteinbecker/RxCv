@@ -1,0 +1,433 @@
+{
+  "images": [
+    {
+      "image_index": 1,
+      "path": "/Users/jts/Documents/ocr-rx3.png",
+      "components": [
+        {
+          "image_index": 1,
+          "component_index": 1,
+          "bbox_xyxy": [
+            167,
+            166,
+            531,
+            944
+          ],
+          "crop_path": "output/2026-05-03_1923/img1_component_01.png",
+          "component_type": "bag",
+          "text": "NOC 1264-7800. 49\nBBAXTER\n0.9% Sodium\nChloride Injection, Usp ~'\nSterile, nonpyrogenic\nSingle-dose container\nFor intravenous use only\nDo not use unless\nSolution is clear and\nSeal is intact.\n~250\nmL\nLot 2J/D588\nApprox\nEXP 07/27\n| >\u00bb",
+          "best_rotation": 0,
+          "best_deskew": -2.0,
+          "best_psm": 11,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 86.26315789473684,
+          "tokens": [
+            "noc",
+            "1264",
+            "7800",
+            "49",
+            "bbaxter",
+            "sodium",
+            "chloride",
+            "sterile",
+            "nonpyrogenic",
+            "intravenous",
+            "do",
+            "not",
+            "unless",
+            "solution",
+            "clear",
+            "seal",
+            "intact",
+            "250",
+            "2j",
+            "d588",
+            "approx",
+            "07",
+            "27"
+          ],
+          "product": "0.9% Sodium Chloride Injection, USP",
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": null,
+          "lot": "2JD588",
+          "expiration": "07/27",
+          "volume_ml": "250",
+          "strength": null,
+          "aspect_ratio": 0.46786632390745503,
+          "area": 283192
+        },
+        {
+          "image_index": 1,
+          "component_index": 2,
+          "bbox_xyxy": [
+            572,
+            59,
+            1374,
+            955
+          ],
+          "crop_path": "output/2026-05-03_1923/img1_component_02.png",
+          "component_type": "bag",
+          "text": "349406491890080\nTEAR,\nPfizer\ninjectables\nLot 308777251009\nEXP 05/30/2028\nDILUTION: Reconstitute with\n10 mL of Sterile Water for Injection,\nUSP per vial. Gently swirl to\nThe reconstituted solution\nbe further diluted in 0.9%\nChoride Injection or 5% Dextrose\ninjection to a final Concentration\nof 10 mg/mL to 40 mg/mt.,\nDiscard unused portion,\nSTERILE WATER\nFOR INJECTION, Usp\nFor Orug Diluent Use\nPreservative Free\nLot HK3092\nEXP 12/26\nLot 308777251000\nEXP 05/30/2028\nDILUTION: Reconstitute with\n10 mL of Sterile Water for injars:\nUSP per vial. Gently swirl to\nThe reconstituted solution\nbe further diluted in 0.9% Sodium\nChloride Injection or 5% Dextrose\nInjection to a final concentration\nof 10 mg/mL. to 40 mg/mL.\nDiscard unused portion,\nSTERILE WATER\nFOR INJECTION, Usp\nFor Drug Diluent Use\nPreservative Free\nLot HK3092\nEXP 12/26\n\\\"\nLot 308777251009\nEXP 05/30/2028\nDILUTION: Reconstitute With\n10 mL of Sterile Water fo, Injection\nUSP per vial. Gently to\nThe reconstituted solution\nbe further diluted in 0.9%\nChioride Injection or 5% Dextrose\nInjection to a final CONCENtration\nof 10 mg/mL to 40 mg/mt.\nDiscard unused portion.",
+          "best_rotation": 0,
+          "best_deskew": -1.0,
+          "best_psm": 3,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 88.88636363636364,
+          "tokens": [
+            "349406491890080",
+            "tear",
+            "pfizer",
+            "injectables",
+            "308777251009",
+            "05",
+            "30",
+            "2028",
+            "dilution",
+            "reconstitute",
+            "10",
+            "sterile",
+            "water",
+            "per",
+            "vial",
+            "gently",
+            "swirl",
+            "reconstituted",
+            "solution",
+            "be",
+            "further",
+            "diluted",
+            "choride",
+            "or",
+            "dextrose",
+            "final",
+            "concentration",
+            "10",
+            "mg",
+            "40",
+            "mg",
+            "mt",
+            "discard",
+            "unused",
+            "portion",
+            "sterile",
+            "water",
+            "orug",
+            "diluent",
+            "preservative",
+            "free",
+            "hk3092",
+            "12",
+            "26",
+            "308777251000",
+            "05",
+            "30",
+            "2028",
+            "dilution",
+            "reconstitute",
+            "10",
+            "sterile",
+            "water",
+            "injars",
+            "per",
+            "vial",
+            "gently",
+            "swirl",
+            "reconstituted",
+            "solution",
+            "be",
+            "further",
+            "diluted",
+            "sodium",
+            "chloride",
+            "or",
+            "dextrose",
+            "final",
+            "concentration",
+            "10",
+            "mg",
+            "40",
+            "mg",
+            "discard",
+            "unused",
+            "portion",
+            "sterile",
+            "water",
+            "drug",
+            "diluent",
+            "preservative",
+            "free",
+            "hk3092",
+            "12",
+            "26",
+            "308777251009",
+            "05",
+            "30",
+            "2028",
+            "dilution",
+            "reconstitute",
+            "10",
+            "sterile",
+            "water",
+            "fo",
+            "per",
+            "vial",
+            "gently",
+            "reconstituted",
+            "solution",
+            "be",
+            "further",
+            "diluted",
+            "chioride",
+            "or",
+            "dextrose",
+            "final",
+            "concentration",
+            "10",
+            "mg",
+            "40",
+            "mg",
+            "mt",
+            "discard",
+            "unused",
+            "portion"
+          ],
+          "product": "0.9% Sodium Chloride Injection, USP",
+          "manufacturer": "Pfizer Injectables",
+          "manufacturer_source": "name",
+          "ndc": null,
+          "lot": "308777251009",
+          "expiration": "05/30/2028",
+          "volume_ml": "10",
+          "strength": "10 mg",
+          "aspect_ratio": 0.8950892857142857,
+          "area": 718592
+        }
+      ]
+    },
+    {
+      "image_index": 2,
+      "path": "/Users/jts/Documents/ocr-rx4.png",
+      "components": [
+        {
+          "image_index": 2,
+          "component_index": 1,
+          "bbox_xyxy": [
+            229,
+            0,
+            903,
+            732
+          ],
+          "crop_path": "output/2026-05-03_1923/img2_component_01.png",
+          "component_type": "bag",
+          "text": "Injectables \u2014 NDC 0009-0224.) GBB NDC 0009-0224.29\nCEFTAZIDIME- CEFTAZIDIME-\nAVIBACTAM AVIBACTAM\nINJECTION INJECTION\n2.5 g per vial\nFor Intravenous Use Only\nSingle-dose vial. Discard unused\nportion. Rx only\nFor Intravenous Use Only\nSingle-dose vial. Discard unused\nportion. Rx only",
+          "best_rotation": 90,
+          "best_deskew": -0.0,
+          "best_psm": 3,
+          "best_preprocess": "inv_otsu",
+          "ocr_confidence": 88.17948717948718,
+          "tokens": [
+            "injectables",
+            "0009",
+            "0224",
+            "gbb",
+            "0009",
+            "0224",
+            "29",
+            "ceftazidime",
+            "ceftazidime",
+            "avibactam",
+            "avibactam",
+            "per",
+            "vial",
+            "intravenous",
+            "vial",
+            "discard",
+            "unused",
+            "portion",
+            "rx",
+            "intravenous",
+            "vial",
+            "discard",
+            "unused",
+            "portion",
+            "rx"
+          ],
+          "product": null,
+          "manufacturer": "Pfizer",
+          "manufacturer_source": "ndc",
+          "ndc": "0009-0224",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": null,
+          "strength": "2.5 g",
+          "aspect_ratio": 0.9207650273224044,
+          "area": 493368
+        },
+        {
+          "image_index": 2,
+          "component_index": 2,
+          "bbox_xyxy": [
+            875,
+            0,
+            1178,
+            547
+          ],
+          "crop_path": "output/2026-05-03_1923/img2_component_02.png",
+          "component_type": "bag",
+          "text": "Injectables \u00a9 NDC 0009-0224-29\nCEFTAZIDIME-\nAVIBACTAM\nINJECTION\n2.5 g per vial\nFor Intravenous Use Only\nSingle-dose vial. Discard unused\nportion. Rx only",
+          "best_rotation": 90,
+          "best_deskew": 1.0,
+          "best_psm": 3,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 89.63636363636364,
+          "tokens": [
+            "injectables",
+            "0009",
+            "0224",
+            "29",
+            "ceftazidime",
+            "avibactam",
+            "per",
+            "vial",
+            "intravenous",
+            "vial",
+            "discard",
+            "unused",
+            "portion",
+            "rx"
+          ],
+          "product": null,
+          "manufacturer": "Pfizer",
+          "manufacturer_source": "ndc",
+          "ndc": "00009-0224-29",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": null,
+          "strength": "2.5 g",
+          "aspect_ratio": 0.5539305301645339,
+          "area": 165741
+        }
+      ]
+    }
+  ],
+  "linkage": {
+    "equiv_classes_image1": [
+      {
+        "image_index": 1,
+        "member_indices": [
+          1
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": null,
+        "lot": "2JD588",
+        "expiration": "07/27",
+        "manufacturer": null,
+        "product": "0.9% Sodium Chloride Injection, USP",
+        "strength": null,
+        "volume_ml": "250",
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 1,
+        "member_indices": [
+          2
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": null,
+        "lot": "308777251009",
+        "expiration": "05/30/2028",
+        "manufacturer": "Pfizer Injectables",
+        "product": "0.9% Sodium Chloride Injection, USP",
+        "strength": "10 mg",
+        "volume_ml": "10",
+        "grouping_reason": "single"
+      }
+    ],
+    "equiv_classes_image2": [
+      {
+        "image_index": 2,
+        "member_indices": [
+          1
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "0009-0224",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": "Pfizer",
+        "product": null,
+        "strength": "2.5 g",
+        "volume_ml": null,
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 2,
+        "member_indices": [
+          2
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "00009-0224-29",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": "Pfizer",
+        "product": null,
+        "strength": "2.5 g",
+        "volume_ml": null,
+        "grouping_reason": "single"
+      }
+    ],
+    "within_image_relations": {
+      "image1": [],
+      "image2": []
+    },
+    "links_by_tier": {
+      "identity": [],
+      "sku": [],
+      "therapeutic": []
+    },
+    "unmatched_image1": [
+      {
+        "image_index": 1,
+        "class_id": 0,
+        "component_indices": [
+          1
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 1,
+        "class_id": 1,
+        "component_indices": [
+          2
+        ],
+        "reason": "no_candidate"
+      }
+    ],
+    "unmatched_image2": [
+      {
+        "image_index": 2,
+        "class_id": 0,
+        "component_indices": [
+          1
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 2,
+        "class_id": 1,
+        "component_indices": [
+          2
+        ],
+        "reason": "no_candidate"
+      }
+    ]
+  }
+}
