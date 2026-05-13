@@ -1,0 +1,11 @@
+{
+  "images": [
+    {
+      "image_index": 1,
+      "path": "/Users/jts/Documents/ocr-rx3.png",
+      "components": [
+        {
+          "image_index": 1,
+          "component_index": 1,
+          "bbox_xyxy": [
+            

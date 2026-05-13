@@ -1,0 +1,541 @@
+{
+  "images": [
+    {
+      "image_index": 1,
+      "path": "/Users/jts/Documents/ocr-rx1.png",
+      "components": [
+        {
+          "image_index": 1,
+          "component_index": 1,
+          "bbox_xyxy": [
+            161,
+            0,
+            721,
+            966
+          ],
+          "crop_path": "output/2026-05-03_1824/img1_component_01.png",
+          "component_type": "bag",
+          "text": "NDC 0264-7800-10\nBaxte r\n0.9% Sodium Chloride\nInjection, USP\n100 mL\n~1\nEach 100 mL contains Sodium Chloride\n0.9g\nWater for Injection\nQs.\npH 5.0 (4.5 to 7.0)\nCalc. Osmolarity 308 mOsmoVL\nFor intravenous use\nSingle Dose Container\nDiscard unused portion\nStore at 25\u00b0C (77\u00b0F);\n\u20143\nexcursions permitted to 15-30\u00b0C\n(59-86\u00b0F) [see USP Controlled\nRoom Temperature].\nLOT US021790\nEXP 04/27\nBaxter Healthcare Corporation\nDeerfield, IL 60015 USA\nMade in USA\nPL 146 Plastic\n287123\n\u2122\natk\ni",
+          "best_rotation": 0,
+          "best_deskew": -1.0,
+          "best_psm": 11,
+          "best_preprocess": "inv_otsu",
+          "ocr_confidence": 88.88311688311688,
+          "tokens": [
+            "0264",
+            "7800",
+            "10",
+            "baxte",
+            "sodium",
+            "chloride",
+            "100",
+            "100",
+            "sodium",
+            "chloride",
+            "9g",
+            "water",
+            "qs",
+            "ph",
+            "calc",
+            "osmolarity",
+            "308",
+            "mosmovl",
+            "intravenous",
+            "discard",
+            "unused",
+            "portion",
+            "at",
+            "25",
+            "77",
+            "excursions",
+            "permitted",
+            "15",
+            "30",
+            "59",
+            "86",
+            "see",
+            "controlled",
+            "room",
+            "temperature",
+            "us021790",
+            "04",
+            "27",
+            "baxter",
+            "healthcare",
+            "corporation",
+            "deerfield",
+            "il",
+            "60015",
+            "pl",
+            "146",
+            "plastic",
+            "287123",
+            "atk"
+          ],
+          "product": "0.9% Sodium Chloride Injection, USP",
+          "manufacturer": "B. Braun",
+          "manufacturer_source": "ndc",
+          "ndc": "00264-7800-10",
+          "lot": "US021790",
+          "expiration": "04/27",
+          "volume_ml": "100",
+          "strength": "0.9 g",
+          "aspect_ratio": 0.5797101449275363,
+          "area": 540960
+        },
+        {
+          "image_index": 1,
+          "component_index": 2,
+          "bbox_xyxy": [
+            726,
+            405,
+            918,
+            778
+          ],
+          "crop_path": "output/2026-05-03_1824/img1_component_02.png",
+          "component_type": "vial",
+          "text": "LOT K250250\nEXP 09/26\n2mL",
+          "best_rotation": 90,
+          "best_deskew": -0.0,
+          "best_psm": 3,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 92.0,
+          "tokens": [
+            "k250250",
+            "09",
+            "26",
+            "2ml"
+          ],
+          "product": null,
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": null,
+          "lot": "K250250",
+          "expiration": "09/26",
+          "volume_ml": "2",
+          "strength": null,
+          "aspect_ratio": 0.514745308310992,
+          "area": 71616
+        },
+        {
+          "image_index": 1,
+          "component_index": 3,
+          "bbox_xyxy": [
+            916,
+            405,
+            1109,
+            779
+          ],
+          "crop_path": "output/2026-05-03_1824/img1_component_03.png",
+          "component_type": "vial",
+          "text": "LOT K250250\nEXP 09/26\n2mL",
+          "best_rotation": 0,
+          "best_deskew": 2.0,
+          "best_psm": 4,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 87.0,
+          "tokens": [
+            "k250250",
+            "09",
+            "26",
+            "2ml"
+          ],
+          "product": null,
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": null,
+          "lot": "K250250",
+          "expiration": "09/26",
+          "volume_ml": "2",
+          "strength": null,
+          "aspect_ratio": 0.516042780748663,
+          "area": 72182
+        },
+        {
+          "image_index": 1,
+          "component_index": 4,
+          "bbox_xyxy": [
+            1118,
+            406,
+            1301,
+            782
+          ],
+          "crop_path": "output/2026-05-03_1824/img1_component_04.png",
+          "component_type": "vial",
+          "text": "LOT 306122%\nP 08/31/2025\n2mL",
+          "best_rotation": 0,
+          "best_deskew": -2.0,
+          "best_psm": 11,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 82.4,
+          "tokens": [
+            "306122",
+            "08",
+            "31",
+            "2025",
+            "2ml"
+          ],
+          "product": null,
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": null,
+          "lot": "306122",
+          "expiration": "08/31/2095",
+          "volume_ml": "2",
+          "strength": null,
+          "aspect_ratio": 0.4867021276595745,
+          "area": 68808
+        }
+      ]
+    },
+    {
+      "image_index": 2,
+      "path": "/Users/jts/Documents/ocr-rx2.png",
+      "components": [
+        {
+          "image_index": 2,
+          "component_index": 1,
+          "bbox_xyxy": [
+            0,
+            45,
+            332,
+            637
+          ],
+          "crop_path": "output/2026-05-03_1824/img2_component_01.png",
+          "component_type": "bag",
+          "text": "| Thiamine\n200mg/2mL\nfor Injection\nua\nNDC 04001-0243-01",
+          "best_rotation": 0,
+          "best_deskew": -1.0,
+          "best_psm": 3,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 88.5,
+          "tokens": [
+            "thiamine",
+            "200mg",
+            "2ml",
+            "ua",
+            "04001",
+            "0243",
+            "01"
+          ],
+          "product": "Thiamine HCl Injection",
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": "04001-0243-01",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": "2",
+          "strength": "200 mg/2 mL",
+          "aspect_ratio": 0.5608108108108109,
+          "area": 196544
+        },
+        {
+          "image_index": 2,
+          "component_index": 2,
+          "bbox_xyxy": [
+            311,
+            12,
+            703,
+            664
+          ],
+          "crop_path": "output/2026-05-03_1824/img2_component_02.png",
+          "component_type": "bag",
+          "text": "Thiamine\n200mg/2mL\nfor Injection\nad\nNDC 04001-0243-01",
+          "best_rotation": 90,
+          "best_deskew": -0.0,
+          "best_psm": 3,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 91.42857142857143,
+          "tokens": [
+            "thiamine",
+            "200mg",
+            "2ml",
+            "ad",
+            "04001",
+            "0243",
+            "01"
+          ],
+          "product": "Thiamine HCl Injection",
+          "manufacturer": null,
+          "manufacturer_source": null,
+          "ndc": "04001-0243-01",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": "2",
+          "strength": "200 mg/2 mL",
+          "aspect_ratio": 0.6012269938650306,
+          "area": 255584
+        },
+        {
+          "image_index": 2,
+          "component_index": 3,
+          "bbox_xyxy": [
+            670,
+            48,
+            1012,
+            638
+          ],
+          "crop_path": "output/2026-05-03_1824/img2_component_03.png",
+          "component_type": "bag",
+          "text": "Thiamine\n200mg/2mL\nfor Injection\nKABI\nFRESENIUS\nNDC 03442-0500-10",
+          "best_rotation": 0,
+          "best_deskew": -1.0,
+          "best_psm": 11,
+          "best_preprocess": "otsu",
+          "ocr_confidence": 93.5,
+          "tokens": [
+            "thiamine",
+            "200mg",
+            "2ml",
+            "kabi",
+            "fresenius",
+            "03442",
+            "0500",
+            "10"
+          ],
+          "product": "Thiamine HCl Injection",
+          "manufacturer": "Fresenius Kabi",
+          "manufacturer_source": "name",
+          "ndc": "03442-0500-10",
+          "lot": null,
+          "expiration": null,
+          "volume_ml": "2",
+          "strength": "200 mg/2 mL",
+          "aspect_ratio": 0.5796610169491525,
+          "area": 201780
+        }
+      ]
+    }
+  ],
+  "linkage": {
+    "equiv_classes_image1": [
+      {
+        "image_index": 1,
+        "member_indices": [
+          1
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "00264-7800-10",
+        "lot": "US021790",
+        "expiration": "04/27",
+        "manufacturer": "B. Braun",
+        "product": "0.9% Sodium Chloride Injection, USP",
+        "strength": "0.9 g",
+        "volume_ml": "100",
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 1,
+        "member_indices": [
+          2,
+          3
+        ],
+        "member_types": [
+          "vial",
+          "vial"
+        ],
+        "ndc": null,
+        "lot": "K250250",
+        "expiration": "09/26",
+        "manufacturer": null,
+        "product": null,
+        "strength": null,
+        "volume_ml": "2",
+        "grouping_reason": "same_lot_ndc"
+      },
+      {
+        "image_index": 1,
+        "member_indices": [
+          4
+        ],
+        "member_types": [
+          "vial"
+        ],
+        "ndc": null,
+        "lot": "306122",
+        "expiration": "08/31/2095",
+        "manufacturer": null,
+        "product": null,
+        "strength": null,
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      }
+    ],
+    "equiv_classes_image2": [
+      {
+        "image_index": 2,
+        "member_indices": [
+          1
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "04001-0243-01",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": null,
+        "product": "Thiamine HCl Injection",
+        "strength": "200 mg/2 mL",
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 2,
+        "member_indices": [
+          2
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "04001-0243-01",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": null,
+        "product": "Thiamine HCl Injection",
+        "strength": "200 mg/2 mL",
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      },
+      {
+        "image_index": 2,
+        "member_indices": [
+          3
+        ],
+        "member_types": [
+          "bag"
+        ],
+        "ndc": "03442-0500-10",
+        "lot": null,
+        "expiration": null,
+        "manufacturer": "Fresenius Kabi",
+        "product": "Thiamine HCl Injection",
+        "strength": "200 mg/2 mL",
+        "volume_ml": "2",
+        "grouping_reason": "single"
+      }
+    ],
+    "within_image_relations": {
+      "image1": [],
+      "image2": [
+        {
+          "image_index": 2,
+          "class_a_id": 0,
+          "class_b_id": 1,
+          "class_a_components": [
+            1
+          ],
+          "class_b_components": [
+            2
+          ],
+          "tier": "sku",
+          "confidence": "high",
+          "shared_fields": [
+            "ndc",
+            "product",
+            "strength",
+            "volume_ml"
+          ],
+          "notes": null
+        },
+        {
+          "image_index": 2,
+          "class_a_id": 0,
+          "class_b_id": 2,
+          "class_a_components": [
+            1
+          ],
+          "class_b_components": [
+            3
+          ],
+          "tier": "therapeutic",
+          "confidence": "medium",
+          "shared_fields": [
+            "product",
+            "strength",
+            "volume_ml"
+          ],
+          "notes": "same product/strength, different manufacturer"
+        },
+        {
+          "image_index": 2,
+          "class_a_id": 1,
+          "class_b_id": 2,
+          "class_a_components": [
+            2
+          ],
+          "class_b_components": [
+            3
+          ],
+          "tier": "therapeutic",
+          "confidence": "medium",
+          "shared_fields": [
+            "product",
+            "strength",
+            "volume_ml"
+          ],
+          "notes": "same product/strength, different manufacturer"
+        }
+      ]
+    },
+    "links_by_tier": {
+      "identity": [],
+      "sku": [],
+      "therapeutic": []
+    },
+    "unmatched_image1": [
+      {
+        "image_index": 1,
+        "class_id": 0,
+        "component_indices": [
+          1
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 1,
+        "class_id": 1,
+        "component_indices": [
+          2,
+          3
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 1,
+        "class_id": 2,
+        "component_indices": [
+          4
+        ],
+        "reason": "no_candidate"
+      }
+    ],
+    "unmatched_image2": [
+      {
+        "image_index": 2,
+        "class_id": 0,
+        "component_indices": [
+          1
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 2,
+        "class_id": 1,
+        "component_indices": [
+          2
+        ],
+        "reason": "no_candidate"
+      },
+      {
+        "image_index": 2,
+        "class_id": 2,
+        "component_indices": [
+          3
+        ],
+        "reason": "no_candidate"
+      }
+    ]
+  }
+}

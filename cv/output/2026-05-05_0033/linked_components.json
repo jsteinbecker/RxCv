@@ -1,0 +1,32 @@
+{
+  "segmentation": {
+    "method": "panoptic"
+  },
+  "images": [
+    {
+      "image_index": 1,
+      "path": "/Users/jts/Documents/ocr-rx1.png",
+      "components": []
+    },
+    {
+      "image_index": 2,
+      "path": "/Users/jts/Documents/ocr-rx2.png",
+      "components": []
+    }
+  ],
+  "linkage": {
+    "equiv_classes_image1": [],
+    "equiv_classes_image2": [],
+    "within_image_relations": {
+      "image1": [],
+      "image2": []
+    },
+    "links_by_tier": {
+      "identity": [],
+      "sku": [],
+      "therapeutic": []
+    },
+    "unmatched_image1": [],
+    "unmatched_image2": []
+  }
+}
