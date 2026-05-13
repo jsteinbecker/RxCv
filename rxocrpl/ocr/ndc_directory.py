@@ -16,6 +16,7 @@ in memory; for tighter footprint, switch the indexes to SQLite or DuckDB.
 
 from __future__ import annotations
 import csv
+import json
 import re
 import os
 from dataclasses import dataclass
@@ -382,3 +383,96 @@ def set_directory(directory: NDCDirectory) -> None:
     """Override the singleton (useful for tests)."""
     global _directory_singleton
     _directory_singleton = directory
+
+
+# ---------------------------------------------------------------------------
+# Labeler-code directory (labelers.json)
+# ---------------------------------------------------------------------------
+
+_LABELERS_DEFAULT_PATH = os.environ.get(
+    "LABELERS_JSON",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "db", "labelers.json"),
+)
+
+
+def _extract_labeler_code(ndc: str) -> Optional[str]:
+    """Return the labeler segment from a segmented NDC ('0002' from '0002-1234-56')
+    or from a raw digit run (first 5 or 4 digits)."""
+    if "-" in ndc:
+        code = ndc.split("-")[0]
+        return code if len(code) >= 4 else None
+    digits = re.sub(r"[^\d]", "", ndc)
+    if len(digits) >= 5:
+        return digits[:5]
+    if len(digits) >= 4:
+        return digits[:4]
+    return None
+
+
+class LabelerDirectory:
+    """Lightweight labeler-code → manufacturer lookup from labelers.json.
+
+    Complements NDCDirectory: requires only the NDC's first segment (labeler
+    code), loads in milliseconds, and works when the full FDA CSV is absent.
+    Covers 1 800+ labelers across both 4-digit and 5-digit code formats.
+    """
+
+    def __init__(self, json_path: str = _LABELERS_DEFAULT_PATH):
+        self._path = json_path
+        self._by_code: dict[str, str] = {}  # code -> full_name
+        self._loaded = False
+
+    def load(self) -> "LabelerDirectory":
+        if self._loaded:
+            return self
+        if not os.path.exists(self._path):
+            self._loaded = True
+            return self
+        with open(self._path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for code, info in data.items():
+            name = info.get("full_name") or info.get("name") or ""
+            if name:
+                self._by_code[code] = name
+        self._loaded = True
+        return self
+
+    def lookup_from_ndc(self, ndc: str) -> Optional[str]:
+        """Return the manufacturer's full name for an NDC, or None if unrecognized.
+
+        Extracts the labeler code from the first NDC segment. If a 5-digit code
+        isn't found, falls back to the 4-digit prefix (some entries use 4 digits).
+        """
+        if not ndc:
+            return None
+        if not self._loaded:
+            self.load()
+        code = _extract_labeler_code(ndc)
+        if code is None:
+            return None
+        name = self._by_code.get(code)
+        if name is None and len(code) == 5:
+            name = self._by_code.get(code[:4])
+        return name
+
+    def is_valid_labeler(self, ndc: str) -> bool:
+        """True when the NDC's labeler code appears in the directory."""
+        return self.lookup_from_ndc(ndc) is not None
+
+
+_labeler_singleton: Optional[LabelerDirectory] = None
+
+
+def get_labeler_directory(path: Optional[str] = None) -> LabelerDirectory:
+    """Shared LabelerDirectory singleton, loaded on first use."""
+    global _labeler_singleton
+    if _labeler_singleton is None:
+        _labeler_singleton = LabelerDirectory(path or _LABELERS_DEFAULT_PATH)
+        _labeler_singleton.load()
+    return _labeler_singleton
+
+
+def set_labeler_directory(directory: LabelerDirectory) -> None:
+    """Override the singleton (useful for tests)."""
+    global _labeler_singleton
+    _labeler_singleton = directory

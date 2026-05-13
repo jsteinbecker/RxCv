@@ -47,10 +47,10 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 
 try:
-    from .ndc_directory import NDCDirectory, NDCEntry, get_directory
+    from .ndc_directory import NDCDirectory, NDCEntry, get_directory, get_labeler_directory
     from .ndc_directory import _is_descriptive_proprietary
 except ImportError:
-    from ndc_directory import NDCDirectory, NDCEntry, get_directory
+    from ndc_directory import NDCDirectory, NDCEntry, get_directory, get_labeler_directory
     from ndc_directory import _is_descriptive_proprietary
 
 try:
@@ -599,6 +599,21 @@ def extract_fields(
             entry = directory.lookup_ndc(best["ndc"].value)
             if entry is not None:
                 _enrich_from_entry(best, agreements, entry)
+
+    # Pass 5: labeler-code enrichment — populate mfg from the NDC prefix when
+    # the full NDC-database lookup didn't yield a manufacturer. labelers.json
+    # covers ~1 800 labelers by their 4/5-digit code and loads in milliseconds,
+    # so this fallback fires even when the large FDA CSV is unavailable.
+    if "ndc" in best and "mfg" not in best:
+        try:
+            mfg_name = get_labeler_directory().lookup_from_ndc(best["ndc"].value)
+            if mfg_name:
+                best["mfg"] = FieldExtraction(
+                    mfg_name, 0.85, best["ndc"].value, "labeler_json:mfg",
+                )
+                agreements["mfg"] = 1.0
+        except Exception:
+            pass
 
     return _build_ocrfields(best, agreements, flat_lines)
 

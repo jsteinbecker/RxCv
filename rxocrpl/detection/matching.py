@@ -157,6 +157,14 @@ class ReferenceMatch:
 # ---------------------------------------------------------------------------
 
 
+def _labeler_prefix(ndc: str | None) -> str | None:
+    """Return the labeler-code segment from a hyphenated NDC, or None."""
+    if not ndc or "-" not in ndc:
+        return None
+    code = ndc.split("-")[0]
+    return code if len(code) >= 4 else None
+
+
 def _pair_score(
           visual_sim: float,
           fields_a: OCRFields,
@@ -167,6 +175,10 @@ def _pair_score(
     Barcode-confirmed NDC matches are weighted at W_BARCODE_NDC (0.30) rather
     than the OCR-only W_NDC (0.15). A barcode match fires when either side has
     a barcode_ndc and it agrees with the other side's best available NDC.
+
+    When the full NDC strings don't match but their labeler-code prefixes agree
+    (same manufacturer, OCR likely misread the product/package segment), a
+    partial W_NDC × 0.5 contribution is awarded as a tie-breaking signal.
     """
       lot_match = bool(
             fields_a.lot and fields_b.lot and fields_a.lot == fields_b.lot
@@ -186,9 +198,20 @@ def _pair_score(
             and (fields_a.barcode_ndc or fields_b.barcode_ndc)
       )
 
+      # Labeler-prefix match: same manufacturer even when full NDC differs.
+      # Fires only when neither full-NDC nor barcode match already applies.
+      labeler_prefix_a = _labeler_prefix(fields_a.ndc)
+      labeler_prefix_b = _labeler_prefix(fields_b.ndc)
+      labeler_match = bool(
+            not ndc_match and not barcode_ndc_match
+            and labeler_prefix_a and labeler_prefix_b
+            and labeler_prefix_a == labeler_prefix_b
+      )
+
       ndc_component = (
             W_BARCODE_NDC if barcode_ndc_match
             else W_NDC if ndc_match
+            else W_NDC * 0.5 if labeler_match
             else 0.0
       )
 
@@ -202,6 +225,7 @@ def _pair_score(
             "lot": lot_match,
             "ndc": ndc_match,
             "barcode_ndc": barcode_ndc_match,
+            "labeler_match": labeler_match,
             "exp": exp_match,
       }
 

@@ -23,16 +23,47 @@ Usage (Python):
 
 from __future__ import annotations
 
+import base64
+import io
 import json
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
+from PIL import Image as PILImage
+from PIL import ImageDraw, ImageFont
 
 from detection import Detection, Detector
 from embedding import Embedder
 from matching import ReferenceMatch, match_against_reference, summarize
 from ocr import FieldExtractor, OCRFields
+
+# Best-effort font for annotation labels — falls back to PIL's bitmap default.
+try:
+    _LABEL_FONT = ImageFont.load_default(size=9)
+except TypeError:
+    _LABEL_FONT = ImageFont.load_default()
+
+# Colours keyed by detection role.
+_COLOR_REF = (30, 120, 255)    # blue   — reference image slot
+_COLOR_MATCH = (20, 190, 60)   # green  — matched to inventory
+_COLOR_OOI = (220, 40, 40)     # red    — out-of-inventory
+_COLOR_UNKNOWN = (160, 160, 160)  # grey — no assignment info
+
+
+def _det_color(
+    det: Detection,
+    assignment,  # Assignment | None
+    reference_image: str,
+) -> tuple[int, int, int]:
+    if assignment is None:
+        return _COLOR_UNKNOWN
+    if det.source_image == reference_image:
+        return _COLOR_REF
+    return _COLOR_MATCH if assignment.slot_id is not None else _COLOR_OOI
 
 
 @dataclass
@@ -112,6 +143,240 @@ class PipelineResult:
             ],
         }
 
+    # ------------------------------------------------------------------
+    # Markdown report
+    # ------------------------------------------------------------------
+
+    def _render_annotated_image(self, source_image: str) -> str:
+        """Return a base64-encoded PNG of *source_image* with segmentation
+        mask overlays (semi-transparent fills) and labelled bounding boxes.
+
+        Colour legend:
+            blue  — reference-image slot
+            green — subsequent detection matched to an inventory slot
+            red   — subsequent detection flagged out-of-inventory
+        """
+        img = PILImage.open(source_image).convert("RGB")
+        img_arr = np.array(img, dtype=np.float32)
+        H, W = img_arr.shape[:2]
+
+        assignment_by_det = {a.detection_id: a for a in self.match.assignments}
+
+        # --- Pass 1: semi-transparent mask fill (alpha composite via numpy) ---
+        overlay = np.zeros((H, W, 4), dtype=np.float32)
+        for d in self.detections:
+            if d.source_image != source_image:
+                continue
+            if d.mask.shape != (H, W):
+                continue
+            a = assignment_by_det.get(d.instance_id)
+            r, g, b = _det_color(d, a, self.reference_image)
+            overlay[d.mask, 0] = r
+            overlay[d.mask, 1] = g
+            overlay[d.mask, 2] = b
+            overlay[d.mask, 3] = 70.0  # ~27% opacity
+
+        alpha = overlay[:, :, 3:4] / 255.0
+        blended = (img_arr * (1 - alpha) + overlay[:, :, :3] * alpha).clip(0, 255).astype(np.uint8)
+        img = PILImage.fromarray(blended)
+
+        # --- Pass 2: bounding boxes + labels ---
+        draw = ImageDraw.Draw(img)
+        lw = max(2, min(H, W) // 400)
+
+        for d in self.detections:
+            if d.source_image != source_image:
+                continue
+            a = assignment_by_det.get(d.instance_id)
+            color = _det_color(d, a, self.reference_image)
+
+            x1, y1, x2, y2 = d.bbox
+            draw.rectangle([x1, y1, x2, y2], outline=color, width=lw)
+
+            if a is not None and d.source_image == self.reference_image:
+                label = f"#{d.instance_id} s{a.slot_id}"
+            elif a is not None and a.slot_id is not None:
+                label = f"#{d.instance_id} s{a.slot_id} {a.score:.2f}"
+            elif a is not None:
+                label = f"#{d.instance_id} OOI {a.score:.2f}"
+            else:
+                label = f"#{d.instance_id} {d.class_label}"
+
+            # Measure label to size the background pill.
+            try:
+                bbox_t = draw.textbbox((0, 0), label, font=_LABEL_FONT)
+                tw, th = bbox_t[2] - bbox_t[0], bbox_t[3] - bbox_t[1]
+            except AttributeError:
+                tw, th = len(label) * 7, 13
+
+            pad = 2
+            bg_x1 = x1
+            bg_y1 = max(0, y1 - th - pad * 2)
+            bg_x2 = min(W, x1 + tw + pad * 2)
+            bg_y2 = y1
+            draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=color)
+            draw.text((bg_x1 + pad, bg_y1 + pad), label, fill=(255, 255, 255), font=_LABEL_FONT)
+
+        # Downscale very large images to keep the .md file manageable.
+        max_width = 1200
+        if img.width > max_width:
+            ratio = max_width / img.width
+            img = img.resize((max_width, int(img.height * ratio)), PILImage.LANCZOS)
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        return base64.b64encode(buf.getvalue()).decode()
+
+    def to_markdown(self, run_time: Optional[datetime] = None) -> str:
+        """Dense Markdown report with annotated segmentation visualisations.
+
+        Embeds annotated images as base64 data URIs so the .md is self-contained.
+        """
+        ts = (run_time or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+        assignment_by_det = {a.detection_id: a for a in self.match.assignments}
+        n_slots = len(self.match.slots)
+
+        lines: list[str] = []
+
+        # ── Header ────────────────────────────────────────────────────────────
+        lines += [
+            "# RxCV Pipeline Report",
+            "",
+            f"| | |",
+            f"|---|---|",
+            f"| **Run** | {ts} |",
+            f"| **Reference** | `{Path(self.reference_image).name}` |",
+            f"| **Images processed** | {len(self.images_processed)} |",
+            f"| **Total detections** | {len(self.detections)} |",
+            f"| **Inventory slots** | {n_slots} |",
+            "",
+            "---",
+            "",
+        ]
+
+        # ── Reference Inventory ───────────────────────────────────────────────
+        lines += [
+            f"## Reference Inventory ({n_slots} slots)",
+            "",
+            "| Slot | Class | Lot | NDC | Exp |",
+            "|-----:|-------|-----|-----|-----|",
+        ]
+        for s in self.match.slots:
+            lines.append(
+                f"| {s.slot_id} | {s.class_label or '—'} | "
+                f"`{s.lot or '—'}` | `{s.ndc or '—'}` | {s.exp or '—'} |"
+            )
+        lines += ["", "---", ""]
+
+        # ── Per-image sections ────────────────────────────────────────────────
+        lines += ["## Results by Image", ""]
+
+        for report in self.match.image_reports:
+            img_name = Path(report.source_image).name
+
+            if report.is_reference:
+                lines.append(f"### [REF] {img_name}")
+                lines.append(
+                    f"{report.detection_count} detections — defines inventory"
+                )
+            else:
+                n_miss = len(report.missing_slot_ids)
+                lines.append(f"### {img_name}")
+                lines.append(
+                    f"{report.detection_count} detections — "
+                    f"**{report.assigned_count} matched** / "
+                    f"{report.out_of_inventory_count} out-of-inventory / "
+                    f"{n_miss} missing"
+                )
+            lines.append("")
+
+            # Annotated image
+            b64 = self._render_annotated_image(report.source_image)
+            lines.append(f"![{img_name}](data:image/png;base64,{b64})")
+            lines.append("")
+
+            # Detection table
+            img_dets = [
+                (d, f)
+                for d, f in zip(self.detections, self.fields)
+                if d.source_image == report.source_image
+            ]
+            if img_dets:
+                if report.is_reference:
+                    lines += [
+                        "| ID | Class | Det score | Lot | NDC | Exp | OCR |",
+                        "|----|-------|----------:|-----|-----|-----|-----|",
+                    ]
+                    for d, f in img_dets:
+                        ocr_flag = "!" if f.needs_review() else "ok"
+                        lines.append(
+                            f"| {d.instance_id} | {d.class_label} | {d.score:.2f} | "
+                            f"`{f.lot or '—'}` | `{f.ndc or '—'}` | {f.exp or '—'} | {ocr_flag} |"
+                        )
+                else:
+                    lines += [
+                        "| ID | Class | Det score | Slot | Match score | Lot | NDC | Exp | OCR |",
+                        "|----|-------|----------:|:----:|------------:|-----|-----|-----|-----|",
+                    ]
+                    for d, f in img_dets:
+                        a = assignment_by_det.get(d.instance_id)
+                        slot_str = f"s{a.slot_id}" if (a and a.slot_id is not None) else "**OOI**"
+                        mscore = f"{a.score:.2f}" if a else "—"
+                        ocr_flag = "!" if f.needs_review() else "ok"
+                        lines.append(
+                            f"| {d.instance_id} | {d.class_label} | {d.score:.2f} | "
+                            f"{slot_str} | {mscore} | "
+                            f"`{f.lot or '—'}` | `{f.ndc or '—'}` | {f.exp or '—'} | {ocr_flag} |"
+                        )
+
+            # Missing-slot summary for subsequent images
+            if not report.is_reference and report.missing_slot_ids:
+                miss_desc = Counter(
+                    self.match.slots[sid].describe() for sid in report.missing_slot_ids
+                )
+                miss_str = ", ".join(
+                    f"{desc}" + (f" x{cnt}" if cnt > 1 else "")
+                    for desc, cnt in miss_desc.most_common()
+                )
+                lines.append("")
+                lines.append(
+                    f"> **Missing ({len(report.missing_slot_ids)} slots):** {miss_str}"
+                )
+
+            lines += ["", "---", ""]
+
+        # ── OCR review flags ──────────────────────────────────────────────────
+        flagged = [
+            (d, f) for d, f in zip(self.detections, self.fields) if f.needs_review()
+        ]
+        if flagged:
+            lines += [
+                "## OCR Review Flags",
+                "",
+                "| ID | Image | Lot | Lot conf | NDC | NDC conf | Exp | Exp conf |",
+                "|----|-------|-----|:--------:|-----|:--------:|-----|:--------:|",
+            ]
+            for d, f in flagged:
+                lines.append(
+                    f"| {d.instance_id} | {Path(d.source_image).name} | "
+                    f"`{f.lot or '—'}` | {f.lot_confidence:.2f} | "
+                    f"`{f.ndc or '—'}` | {f.ndc_confidence:.2f} | "
+                    f"{f.exp or '—'} | {f.exp_confidence:.2f} |"
+                )
+            lines.append("")
+
+        # ── Legend ────────────────────────────────────────────────────────────
+        lines += [
+            "---",
+            "",
+            "**Annotation legend:**  "
+            "blue = reference slot · green = inventory match · red = out-of-inventory  ",
+            "OCR column: `ok` = all fields confident · `!` = low-confidence field, review needed",
+            "",
+        ]
+
+        return "\n".join(lines)
+
     def summary(self) -> str:
         """Human-readable text summary."""
         lines = []
@@ -121,7 +386,6 @@ class PipelineResult:
 
         # Inventory listing.
         lines.append(f"Reference inventory ({len(self.match.slots)} slots):")
-        from collections import Counter
         desc_counter = Counter(s.describe() for s in self.match.slots)
         for desc, cnt in desc_counter.most_common():
             suffix = f" x{cnt}" if cnt > 1 else ""
@@ -248,7 +512,24 @@ if __name__ == "__main__":
 
     pipeline = Pipeline()
     result = pipeline.process(sys.argv[1:])
-    print(result.summary())
+
+    now = datetime.now()
+    stamp = now.strftime("%Y%m%d_%H%M%S")
+
+    Path("out").mkdir(exist_ok=True)
+
+    json_path = f"out/result_{stamp}.json"
+    md_path = f"out/result_{stamp}.md"
+
+    output = json.dumps(result.to_dict(), indent=2, default=str)
+    with open(json_path, "w") as f:
+        f.write(output)
+    print(f"JSON  -> {json_path}")
+
+    md_content = result.to_markdown(run_time=now)
+    with open(md_path, "w") as f:
+        f.write(md_content)
+    print(f"Report -> {md_path}")
+
     print()
-    print("Full JSON:")
-    print(json.dumps(result.to_dict(), indent=2, default=str))
+    print(result.summary())
