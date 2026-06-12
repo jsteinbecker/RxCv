@@ -30,9 +30,7 @@ Usage (Python):
     result = p.process(["reference.png", "subsequent1.png"])
     print(result.summary())
 """
-
 from __future__ import annotations
-
 import base64
 import io
 import json
@@ -43,10 +41,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    try:
-        from .order import Order
-    except ImportError:
-        from order import Order  # type: ignore[assignment]
+      try:
+            from .order import Order
+      except ImportError:
+            from order import Order  # type: ignore[assignment]
 
 import numpy as np
 from PIL import Image as PILImage
@@ -58,20 +56,24 @@ try:
       from .detection.embedding import Embedder
       from .detection.image_ops import canonicalize_crop
       from .detection.matching import ReferenceMatch, match_against_reference, summarize
+      from .detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
       from .ocr.ndc_directory import NDCDirectory, get_directory
       from .ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
+      from .rxnorm import get_all_rxcui
 except ImportError:
       from detection.clean_and_match import clean_detections, resolve_product
       from detection.detection import Detection, Detector
       from detection.embedding import Embedder
       from detection.image_ops import canonicalize_crop
       from detection.matching import ReferenceMatch, match_against_reference, summarize
+      from detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
       from ocr.ndc_directory import NDCDirectory, get_directory
       from ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
+      from rxnorm import get_all_rxcui
 
 # Best-effort font for annotation labels — falls back to PIL's bitmap default.
 try:
-      _LABEL_FONT = ImageFont.load_default(size=9)
+      _LABEL_FONT = ImageFont.load_default(size=13)
 except TypeError:
       _LABEL_FONT = ImageFont.load_default()
 
@@ -137,6 +139,8 @@ class PipelineResult:
       enrichment: dict[int, dict] = field(default_factory=dict)
       # Certification flag (see class docstring)
       certified_subset_in_inventory: bool = False
+      # Inferred compounding process from reference-image component dosage forms
+      process_inference: Optional[ProcessInferenceResult] = None
 
       def detection_by_id(self, detection_id: int) -> Detection:
             for d in self.detections:
@@ -180,6 +184,7 @@ class PipelineResult:
                               "lot": s.lot,
                               "ndc": s.ndc,
                               "exp": s.exp,
+                              "rxcui": s.rxcui,
                               "description": s.describe(),
                         }
                         for s in self.match.slots
@@ -197,6 +202,10 @@ class PipelineResult:
                         for a in self.match.assignments
                   ],
                   "summary": summarize(self.match),
+                  "process_inference": (
+                        self.process_inference.to_dict()
+                        if self.process_inference is not None else None
+                  ),
                   "detections": [
                         {
                               "instance_id": d.instance_id,
@@ -349,22 +358,38 @@ class PipelineResult:
                         "with the certification that warrants re-imaging or re-counting).",
                         "",
                   ]
-            lines += [
-                  "---",
-                  "",
-            ]
+            lines += ["---", "", ]
+
+            # ── Process Inference ─────────────────────────────────────────────────
+            if self.process_inference is not None:
+                  pi = self.process_inference
+                  lines += [
+                        "## Inferred Compounding Process",
+                        "",
+                        f"**{pi.describe()}**",
+                        "",
+                        "| Component # | Role |",
+                        "|:-----------:|------|",
+                  ]
+                  for i, role in enumerate(pi.roles):
+                        lines.append(f"| {i + 1} | {role.value.replace('_', ' ').title()} |")
+                  lines += [""]
+                  if pi.notes:
+                        for note in pi.notes:
+                              lines.append(f"- {note}")
+                  lines += ["", "---", ""]
 
             # ── Reference Inventory ───────────────────────────────────────────────
             lines += [
                   f"## Reference Inventory ({n_slots} slots)",
                   "",
-                  "| Slot | Class | Brand | Strength | Lot | NDC | Exp |",
-                  "|-----:|-------|-------|----------|-----|-----|-----|",
+                  "| Slot | Class | Brand | Generic | Strength | Lot | NDC | Exp |",
+                  "|-----:|-------|-------|---------|----------|-----|-----|-----|",
             ]
             for s in self.match.slots:
                   lines.append(
                         f"| {s.slot_id} | {s.class_label or '—'} | "
-                        f"{s.brand or '—'} | {s.strength or '—'} | "
+                        f"{s.brand or '—'} | {s.product or '—'} | {s.strength or '—'} | "
                         f"`{s.lot or '—'}` | `{s.ndc or '—'}` | {s.exp or '—'} |"
                   )
             lines += ["", "---", ""]
@@ -415,31 +440,68 @@ class PipelineResult:
                   if img_dets:
                         if report.is_reference:
                               lines += [
-                                    "| ID | Class | Det score | Brand | Strength | Lot | NDC | Exp | OCR |",
-                                    "|----|-------|----------:|-------|----------|-----|-----|-----|-----|",
+                                    "| ID | Class | Score | Brand | Generic | Strength | Lot | NDC | Exp | OCR |",
+                                    "|----|-------|------:|-------|---------|----------|-----|-----|-----|-----|",
                               ]
                               for d, f in img_dets:
                                     ocr_flag = "!" if f.needs_review() else "ok"
                                     lines.append(
                                           f"| {d.instance_id} | {d.class_label} | {d.score:.2f} | "
-                                          f"{f.brand or '—'} | {f.strength or '—'} | "
+                                          f"{f.brand or '—'} | {f.product or '—'} | {f.strength or '—'} | "
                                           f"`{f.lot or '—'}` | `{f.ndc or '—'}` | {f.exp or '—'} | {ocr_flag} |"
                                     )
                         else:
+                              # For subsequent images: Brand / Generic / Strength come from the
+                              # matched reference slot (the authoritative source for drug identity).
+                              # Lot / NDC / Exp show what THIS image's OCR found, with a ✓ when it
+                              # agrees with the reference slot or ⚠ when it diverges.
+                              def _cmp(ref_val: str | None, det_val: str | None) -> str:
+                                    if not ref_val and not det_val:
+                                          return "—"
+                                    if not det_val:
+                                          return f"— (ref: {ref_val})"
+                                    if not ref_val:
+                                          return det_val
+                                    return f"{det_val} ✓" if ref_val == det_val else f"⚠ {det_val} (ref: {ref_val})"
+
+                              slots_by_id = {s.slot_id: s for s in self.match.slots}
                               lines += [
-                                    "| ID | Class | Det score | Slot | Match score | Brand | Strength | Lot | NDC | Exp | OCR |",
-                                    "|----|-------|----------:|:----:|------------:|-------|----------|-----|-----|-----|-----|",
+                                    "> Brand / Generic / Strength: from reference slot."
+                                    " Lot / NDC / Exp: this image's OCR — ✓ agrees with ref, ⚠ diverges.",
+                                    "",
+                                    "| ID | Class | Score | Slot | Match | Brand [ref] | Generic [ref] | Strength [ref] | Lot | NDC | Exp | OCR |",
+                                    "|----|-------|------:|:----:|------:|-------------|---------------|----------------|-----|-----|-----|-----|",
                               ]
                               for d, f in img_dets:
                                     a = assignment_by_det.get(d.instance_id)
-                                    slot_str = f"s{a.slot_id}" if (a and a.slot_id is not None) else "**OOI**"
-                                    mscore = f"{a.score:.2f}" if a else "—"
                                     ocr_flag = "!" if f.needs_review() else "ok"
+                                    if a and a.slot_id is not None:
+                                          slot = slots_by_id[a.slot_id]
+                                          slot_cell = f"s{a.slot_id}"
+                                          mscore = f"{a.score:.2f}"
+                                          if a.forced:
+                                                slot_cell += " ⚡"
+                                                mscore += " forced"
+                                          brand_cell = slot.brand or "—"
+                                          generic_cell = slot.product or "—"
+                                          strength_cell = slot.strength or "—"
+                                          lot_cell = _cmp(slot.lot, f.lot)
+                                          ndc_cell = _cmp(slot.ndc, f.ndc)
+                                          exp_cell = _cmp(slot.exp, f.exp)
+                                    else:
+                                          slot_cell = "**OOI**"
+                                          mscore = f"{a.score:.2f}" if a else "—"
+                                          brand_cell = f.brand or "—"
+                                          generic_cell = f.product or "—"
+                                          strength_cell = f.strength or "—"
+                                          lot_cell = f"`{f.lot}`" if f.lot else "—"
+                                          ndc_cell = f"`{f.ndc}`" if f.ndc else "—"
+                                          exp_cell = f.exp or "—"
                                     lines.append(
                                           f"| {d.instance_id} | {d.class_label} | {d.score:.2f} | "
-                                          f"{slot_str} | {mscore} | "
-                                          f"{f.brand or '—'} | {f.strength or '—'} | "
-                                          f"`{f.lot or '—'}` | `{f.ndc or '—'}` | {f.exp or '—'} | {ocr_flag} |"
+                                          f"{slot_cell} | {mscore} | "
+                                          f"{brand_cell} | {generic_cell} | {strength_cell} | "
+                                          f"{lot_cell} | {ndc_cell} | {exp_cell} | {ocr_flag} |"
                                     )
 
                   # Missing-slot summary for subsequent images
@@ -493,6 +555,11 @@ class PipelineResult:
       def summary(self) -> str:
             """Human-readable text summary."""
             lines = []
+            if self.process_inference is not None:
+                  lines.append(f"Inferred process: {self.process_inference.describe()}")
+                  for note in self.process_inference.notes:
+                        lines.append(f"  - {note}")
+                  lines.append("")
             lines.append(f"Reference image: {Path(self.reference_image).name}")
             lines.append(f"Subsequent images: {len(self.images_processed) - 1}")
             if self.certified_subset_in_inventory:
@@ -883,6 +950,7 @@ class Pipeline:
                               "strength": entry.display_strength(),
                               "manufacturer": entry.labeler,
                               "dosage_form": entry.dosage_form,
+                              "rxcui": get_all_rxcui(f.ndc),
                         }
                   else:
                         # Legacy resolution_source path — uses the hardcoded NDC_DB/LOT_DB
@@ -896,12 +964,31 @@ class Pipeline:
                                     "drug": resolved.get("drug"),
                                     "strength": resolved.get("strength"),
                                     "manufacturer": resolved.get("manufacturer"),
+                                    "rxcui": get_all_rxcui(f.ndc),
                               }
                               # If the database disagrees with the detector on form
                               # (e.g. detector said 'bottle' but NDC says it's a vial),
                               # apply the correction the same way clean_and_match would.
                               if resolved.get("class_label_corrected"):
                                     d.class_label = resolved["class_label"]
+
+            # Stage 3b: process inference from reference-image component dosage forms.
+            # Collects enrichment data for detections in the reference image only,
+            # since those define the set of components being prepared.
+            ref_det_ids = {
+                  d.instance_id for d in all_detections
+                  if d.source_image == reference_image
+            }
+            ref_enrichments = [
+                  enrichment[iid]
+                  for iid in sorted(ref_det_ids)
+                  if iid in enrichment
+            ]
+            process_inference_result: Optional[ProcessInferenceResult] = None
+            if ref_enrichments:
+                  process_inference_result = ProcessInferenceManager(
+                        components=ref_enrichments
+                  ).infer()
 
             # Stage 4: embed each canonical crop in one batched call.
             embeddings = self.embedder.embed_batch([
@@ -918,6 +1005,11 @@ class Pipeline:
                   priority_ndcs=priority_ndcs or None,
             )
 
+            # Stage 5b: propagate rxcui to reference slots.
+            for slot in match.slots:
+                  if slot.ndc:
+                        slot.rxcui = get_all_rxcui(slot.ndc)
+
             return PipelineResult(
                   detections=all_detections,
                   fields=all_fields,
@@ -930,6 +1022,7 @@ class Pipeline:
                   nms_merge_log=merge_log,
                   enrichment=enrichment,
                   certified_subset_in_inventory=certified,
+                  process_inference=process_inference_result,
             )
 
       @staticmethod

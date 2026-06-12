@@ -53,7 +53,7 @@ except ImportError:
 # error-free compared to OCR on small label text.
 W_VISUAL = 0.35
 W_LOT = 0.30
-W_NDC = 0.15        # OCR-inferred NDC match
+W_NDC = 0.15  # OCR-inferred NDC match
 W_BARCODE_NDC = 0.30  # barcode-confirmed NDC match (replaces W_NDC when applicable)
 W_EXP = 0.05
 
@@ -80,14 +80,18 @@ class ReferenceSlot:
       lot: str | None
       ndc: str | None
       exp: str | None
-      brand: str | None = None     # proprietary (brand) name from OCR or NDC DB
+      brand: str | None = None  # proprietary (brand) name from OCR or NDC DB
+      product: str | None = None  # nonproprietary (generic) name from OCR or NDC DB
       strength: str | None = None  # drug strength from OCR or NDC DB
+      rxcui: dict[str, tuple[str, str]] = field(default_factory=dict)
 
       def describe(self) -> str:
             """Short human-readable summary of what's in this slot."""
             parts = [self.class_label or "object"]
             if self.brand:
                   parts.append(self.brand)
+            if self.product:
+                  parts.append(f"({self.product})")
             if self.strength:
                   parts.append(self.strength)
             if self.lot:
@@ -158,11 +162,11 @@ class ReferenceMatch:
 
 
 def _labeler_prefix(ndc: str | None) -> str | None:
-    """Return the labeler-code segment from a hyphenated NDC, or None."""
-    if not ndc or "-" not in ndc:
-        return None
-    code = ndc.split("-")[0]
-    return code if len(code) >= 4 else None
+      """Return the labeler-code segment from a hyphenated NDC, or None."""
+      if not ndc or "-" not in ndc:
+            return None
+      code = ndc.split("-")[0]
+      return code if len(code) >= 4 else None
 
 
 def _pair_score(
@@ -338,6 +342,7 @@ def match_against_reference(
                         ndc=f.ndc,
                         exp=f.exp,
                         brand=f.brand,
+                        product=f.product,
                         strength=f.strength,
                   )
             )
@@ -429,6 +434,10 @@ def _assign_one_image(
       # Lot-override boost: if a (sub, ref) pair shares a lot number AND has
       # decent visual similarity, lift its score to ensure the assignment
       # picks it even if other channels are missing.
+      # Guard with confidence ≥ 0.5 on both sides so bare-alnum fallback reads
+      # (confidence ≤ 0.35, set when no LOT label was present) don't trigger
+      # the boost — those are unlabeled guesses, not confirmed lot reads.
+      LOT_BOOST_MIN_CONFIDENCE = 0.5
       for i, sub_i in enumerate(sub_indices):
             for j, ref_j in enumerate(ref_indices):
                   f_sub = field_records[sub_i]
@@ -437,6 +446,8 @@ def _assign_one_image(
                             f_sub.lot
                             and f_ref.lot
                             and f_sub.lot == f_ref.lot
+                            and f_sub.lot_confidence >= LOT_BOOST_MIN_CONFIDENCE
+                            and f_ref.lot_confidence >= LOT_BOOST_MIN_CONFIDENCE
                             and visual_sims[i, j] >= VISUAL_FLOOR_FOR_LOT_OVERRIDE
                   ):
                         # Force this pair above threshold so the Hungarian solver
@@ -457,10 +468,10 @@ def _assign_one_image(
                         sub_ndc = f_sub.barcode_ndc or f_sub.ndc
                         ref_ndc = f_ref.barcode_ndc or f_ref.ndc
                         if (
-                                    sub_ndc and ref_ndc
-                                    and sub_ndc == ref_ndc
-                                    and sub_ndc in priority_ndcs
-                                    and visual_sims[i, j] >= VISUAL_FLOOR_FOR_LOT_OVERRIDE
+                                  sub_ndc and ref_ndc
+                                  and sub_ndc == ref_ndc
+                                  and sub_ndc in priority_ndcs
+                                  and visual_sims[i, j] >= VISUAL_FLOOR_FOR_LOT_OVERRIDE
                         ):
                               scores[i, j] = max(scores[i, j], threshold + 0.25)
 
