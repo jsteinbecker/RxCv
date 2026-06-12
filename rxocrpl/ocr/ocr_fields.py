@@ -250,15 +250,21 @@ def extract_lot(line: str) -> Optional[FieldExtraction]:
                                line, "extract_lot:labeled")
 
     # Unlabeled fallback: alphanumeric tokens that aren't dates or NDCs.
-    for tok in re.findall(r"[A-Z0-9]{5,15}", line):
+    # Intentionally conservative — a bare token with no surrounding label context
+    # is weakly evidenced. Requirements: ≥6 chars, ≥2 digits (facility codes like
+    # "8A432" have too few digits to be a reliable lot read). Prior is set below
+    # the needs_review() threshold (0.4) so these always get flagged for human
+    # review rather than silently accepted.
+    for tok in re.findall(r"[A-Z0-9]{6,15}", line):
         if re.fullmatch(r"\d{1,2}/\d{1,2}/?\d{0,4}", tok):
             continue
-        if not any(ch.isdigit() for ch in tok):
+        digit_count = sum(1 for ch in tok if ch.isdigit())
+        if digit_count < 2:
             continue
         if re.fullmatch(r"\d{10,11}", tok):
-            return FieldExtraction(tok, 0.50, line, "extract_lot:bare_digits")
+            return FieldExtraction(tok, 0.40, line, "extract_lot:bare_digits")
         if any(ch.isalpha() for ch in tok):
-            return FieldExtraction(_normalize_lot_value(tok.upper()), 0.65,
+            return FieldExtraction(_normalize_lot_value(tok.upper()), 0.35,
                                    line, "extract_lot:bare_alnum")
     return None
 

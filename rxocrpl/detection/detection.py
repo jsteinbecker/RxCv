@@ -63,7 +63,7 @@ def _no_grad_decorator(func):
 # Default text prompt for Grounding DINO. Period-separated phrases is the
 # format the model expects — each phrase becomes a candidate class.
 # Lowercase + trailing period per the model card's examples.
-DEFAULT_PROMPT = "vial . iv bag . wrapper . large vial . cadd cassette ."
+DEFAULT_PROMPT = "vial . iv bag . syringe . wrapper . large vial . cadd cassette ."
 
 # Detection thresholds. Box threshold is intentionally low because some
 # vials in the reference images are partially occluded or knocked over.
