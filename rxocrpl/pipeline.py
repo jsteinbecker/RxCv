@@ -59,7 +59,7 @@ try:
       from .detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
       from .ocr.ndc_directory import NDCDirectory, get_directory
       from .ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
-      from .rxnorm import get_all_rxcui
+      from .rxnorm import get_rxnorm_enrichment
 except ImportError:
       from detection.clean_and_match import clean_detections, resolve_product
       from detection.detection import Detection, Detector
@@ -69,7 +69,7 @@ except ImportError:
       from detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
       from ocr.ndc_directory import NDCDirectory, get_directory
       from ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
-      from rxnorm import get_all_rxcui
+      from rxnorm import get_rxnorm_enrichment
 
 # Best-effort font for annotation labels — falls back to PIL's bitmap default.
 try:
@@ -745,7 +745,7 @@ class Pipeline:
 
       def __init__(
                 self,
-                detection_prompt: str = "vial . iv bag . bottle . syringe . filter .",
+                detection_prompt: str = "vial . iv bag . syringe . filter needle . filter straw . supplies .",
                 device: str | None = None,
                 ndc_directory: NDCDirectory | None = None,
                 certified_subset_in_inventory: bool = False,
@@ -935,12 +935,22 @@ class Pipeline:
 
             # Stage 3: NDC-directory enrichment (drug, strength, manufacturer, form).
             # Falls through to the legacy hardcoded NDC_DB if directory is unavailable.
+            # ndc_scdc_map collects ingredient+strength identity sets (SCDC CUIs) keyed
+            # by NDC; passed to the matcher so it can boost scores for volume variants
+            # of the same drug (e.g. 5 ML vs 15 ML of sodium phosphate).
             enrichment: dict[int, dict] = {}
+            ndc_scdc_map: dict[str, frozenset[str]] = {}
             directory = self.ndc_directory
             for d, f in zip(all_detections, all_fields):
                   entry = None
                   if f.ndc and directory is not None:
                         entry = directory.lookup_ndc(f.ndc)
+
+                  rxnorm_data = get_rxnorm_enrichment(f.ndc) if f.ndc else {}
+                  scdc_raw = rxnorm_data.get("scdc_group") or []
+                  if f.ndc and scdc_raw:
+                        ndc_scdc_map[f.ndc] = frozenset(scdc_raw)
+
                   if entry is not None:
                         enrichment[d.instance_id] = {
                               "source": "ndc_directory",
@@ -950,7 +960,8 @@ class Pipeline:
                               "strength": entry.display_strength(),
                               "manufacturer": entry.labeler,
                               "dosage_form": entry.dosage_form,
-                              "rxcui": get_all_rxcui(f.ndc),
+                              "rxcui": rxnorm_data.get("rxcui"),
+                              "rxnorm": {k: v for k, v in rxnorm_data.items() if k != "rxcui"},
                         }
                   else:
                         # Legacy resolution_source path — uses the hardcoded NDC_DB/LOT_DB
@@ -964,7 +975,8 @@ class Pipeline:
                                     "drug": resolved.get("drug"),
                                     "strength": resolved.get("strength"),
                                     "manufacturer": resolved.get("manufacturer"),
-                                    "rxcui": get_all_rxcui(f.ndc),
+                                    "rxcui": rxnorm_data.get("rxcui"),
+                                    "rxnorm": {k: v for k, v in rxnorm_data.items() if k != "rxcui"},
                               }
                               # If the database disagrees with the detector on form
                               # (e.g. detector said 'bottle' but NDC says it's a vial),
@@ -1003,12 +1015,19 @@ class Pipeline:
                   reference_image=reference_image,
                   force_assign=certified,
                   priority_ndcs=priority_ndcs or None,
+                  scdc_groups=ndc_scdc_map or None,
             )
 
-            # Stage 5b: propagate rxcui to reference slots.
+            # Stage 5b: propagate RxNorm enrichment to reference slots.
             for slot in match.slots:
                   if slot.ndc:
-                        slot.rxcui = get_all_rxcui(slot.ndc)
+                        rxnorm_data = get_rxnorm_enrichment(slot.ndc)
+                        slot.rxcui = rxnorm_data.get("rxcui") or {}
+                        # Also extend ndc_scdc_map in case this slot's NDC wasn't
+                        # in any detection's enrichment (e.g. reference-only item).
+                        scdc_raw = rxnorm_data.get("scdc_group") or []
+                        if scdc_raw:
+                              ndc_scdc_map.setdefault(slot.ndc, frozenset(scdc_raw))
 
             return PipelineResult(
                   detections=all_detections,

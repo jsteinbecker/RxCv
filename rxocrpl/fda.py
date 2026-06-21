@@ -1,8 +1,10 @@
 import json
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, asdict
 from json import dumps
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 import requests
@@ -14,166 +16,221 @@ try:
 except ImportError:
       from rxnorm import get_all_rxcui
 
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
 
-def _dotted(suffix: str) -> str:
-      """Build a regex that matches a suffix with optional periods between letters.
+MatchedVia = Literal[
+      "generic_name",
+      "generic_name_split",
+      "generic_name_split_wildcard",
+      "generic_as_brand",
+      "brand_name",
+      "brand_name_split_wildcard",
+      "brand_name_narrowed",
+      "other",
+]
 
-      'llc' -> 'l\\.?l\\.?c'  matches 'llc', 'l.l.c', 'l.l.c.', etc.
-      Multi-word suffixes get each word built this way.
-      """
-      words = []
-      for word in suffix.split():
-            # Optional period+optional space between every pair of letters
-            chars = [re.escape(c) for c in word]
-            words.append(r"\.?\s?".join(chars))
-      return r"\s+".join(words)
 
+@dataclass
+class PackageInfo(dict):
+      package_count: int
+      package_size: str
+      package_type: str
+
+      def __str__(self) -> str:
+            return f"{self.package_count} {self.package_size} in {self.package_type}"
+
+
+@dataclass
+class ActiveIngredient:
+      name: str
+      strength: str | None = None
+
+
+@dataclass
+class NdcPackaging:
+      description: str
+      package_ndc: str | None = None
+      marketing_start_date: str | None = None
+      sample: bool | None = None
+
+
+@dataclass
+class NdcProduct:
+      labeler_name: str | None
+      brand_name: str | None
+      generic_name: str | None
+      product_ndc: str | None
+      active_ingredients: list[ActiveIngredient]
+      dosage_form: str | None
+      route: list[str] | None
+      packaging: list[NdcPackaging]
+      rxcui: list[str] | None = None
+      # enriched fields (optional, added by lookup functions)
+      _matched_via: MatchedVia | None = None
+      product_type: str | None = None
+      packaged_as: PackageInfo | None = None
+      package_type: str | None = None
+      package_size: str | None = None
+
+
+@dataclass
+class LabelerEntry:
+      name: str  # cleaned
+      full_name: str  # original
+      directory: str | None
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
 _LABELERS_PATH = Path(__file__).parent / "db" / "labelers.json"
 _PAGE_SIZE = 100
-
-_NAME_SUFFIXES = ["pharmaceuticals usa", "pharmaceuticals north america", "pharmaceuticals america",
-                  "pharmaceutical industries", "pharmaceutical sciences", "consumer healthcare", "consumer products",
-                  "animal health", "health care", "medicines", "healthcare", "laboratories", "laboratory",
-                  "manufacturing", "industries", "international", "incorporated", "of new york", "corporation",
-                  "pharmaceuticals", "pharmaceutical", "biosciences", "therapeutics", "biologics", "holdings",
-                  "products", "company", "limited", "pharma", "biotech", "group", "corp", "labs", "ltd", "llc", "inc",
-                  "co", "us", "lp", "usa", "na", "srl", "liability", "pvt", "and", "a subsidiary of Pfizer", "dba PAI",
-                  "solutions"]
-
-_SUFFIX_ALT = "|".join(_dotted(s) for s in _NAME_SUFFIXES)
-
-_SUFFIX_RE = re.compile(r"(?:[\s,.\-&/]+(?:" + _SUFFIX_ALT + r"))+\.?$", re.IGNORECASE, )
-_DIV_RE = re.compile(r"[\s,]+div(?:ision)?\.?(?:\s+of)?\s+.+$", re.IGNORECASE, )
-_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*")
-_PUNCT_RE = re.compile(r"[,.\-&/]+")
-_WS_RE = re.compile(r"\s+")
-_JSONATA_PTYPE_EXTRACTOR = r"$ ~> |**[description]|{'product_type': $reverse($match(description, /\b[A-Z\s,\-]{3,}/).match)[0]}|"
-
-
 _URL = "https://api.fda.gov/drug/ndc.json"
 _TIMEOUT = 10
 
+_NAME_SUFFIXES = [
+      "pharmaceuticals usa", "pharmaceuticals north america", "pharmaceuticals america",
+      "pharmaceutical industries", "pharmaceutical sciences", "consumer healthcare",
+      "consumer products", "animal health", "health care", "medicines", "healthcare",
+      "laboratories", "laboratory", "manufacturing", "industries", "international",
+      "incorporated", "of new york", "corporation", "pharmaceuticals", "pharmaceutical",
+      "biosciences", "therapeutics", "biologics", "holdings", "products", "company",
+      "limited", "pharma", "biotech", "group", "corp", "labs", "ltd", "llc", "inc",
+      "co", "us", "lp", "usa", "na", "srl", "liability", "pvt", "and",
+      "a subsidiary of Pfizer", "dba PAI", "solutions",
+]
+
+PACKAGE_PATTERN = re.compile(
+      r"/\s*"
+      r"(?P<package_size>\d+(?:\.\d+)?\s*[A-Za-zµμ]+)"
+      r"\s+in\s+"
+      r"(?P<package_count>\d+)\s+"
+      r"(?P<package_type>[A-Za-z][A-Za-z,\- ]*?)"
+      r"(?=\s*(?:\(|$))",
+      re.IGNORECASE,
+)
+
+
+def _dotted(suffix: str) -> str:
+      words = [r"\.?\s?".join(re.escape(c) for c in w) for w in suffix.split()]
+      return r"\s+".join(words)
+
+
+_SUFFIX_RE = re.compile(
+      r"(?:[\s,.\-&/]+(?:" + "|".join(_dotted(s) for s in _NAME_SUFFIXES) + r"))+\.?$",
+      re.IGNORECASE,
+)
+_DIV_RE = re.compile(r"[\s,]+div(?:ision)?\.?(?:\s+of)?\s+.+$", re.IGNORECASE)
+_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*")
+_PUNCT_RE = re.compile(r"[,.\-&/]+")
+_WS_RE = re.compile(r"\s+")
+_CAPS_RE = re.compile(r"\b[A-Z][A-Z,\-]*(?:[ ][A-Z][A-Z,\-]*)*\b")
+
+
+# ---------------------------------------------------------------------------
+# Parsing helpers
+# ---------------------------------------------------------------------------
+
+def extract_package_info(value: str) -> PackageInfo | None:
+      m = PACKAGE_PATTERN.search(value)
+      if not m:
+            return None
+      return PackageInfo(
+            package_count=int(m.group("package_count")),
+            package_size=" ".join(m.group("package_size").split()),
+            package_type=" ".join(m.group("package_type").split()),
+      )
+
+
+def _parse_active_ingredients(raw: list[dict] | None) -> list[ActiveIngredient]:
+      if not raw:
+            return []
+      return [ActiveIngredient(name=ai.get("name", ""), strength=ai.get("strength")) for ai in raw]
+
+
+def _parse_packaging(raw: list[dict] | None) -> list[NdcPackaging]:
+      if not raw:
+            return []
+      return [
+            NdcPackaging(
+                  description=p.get("description", ""),
+                  package_ndc=p.get("package_ndc"),
+                  marketing_start_date=p.get("marketing_start_date"),
+                  sample=p.get("sample"),
+            )
+            for p in raw
+      ]
+
+
+def _parse_product(res: dict, fetch_rxcui: bool = False) -> NdcProduct:
+      return NdcProduct(
+            labeler_name=res.get("labeler_name"),
+            brand_name=res.get("brand_name"),
+            generic_name=res.get("generic_name"),
+            product_ndc=res.get("product_ndc"),
+            active_ingredients=_parse_active_ingredients(res.get("active_ingredients")),
+            dosage_form=res.get("dosage_form"),
+            route=res.get("route"),
+            packaging=_parse_packaging(res.get("packaging")),
+            rxcui=get_all_rxcui(res.get("product_ndc")) if fetch_rxcui else None,
+      )
+
+
+# ---------------------------------------------------------------------------
+# Schema inference
+# ---------------------------------------------------------------------------
 
 def infer_schema(obj):
-      """
-      Recursively infer a JSON-like schema from a Python object.
-      """
-
       if isinstance(obj, Mapping):
-            return {"type": "object", "properties": {key: infer_schema(value) for key, value in obj.items()}}
-
-      elif isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
+            return {"type": "object", "properties": {k: infer_schema(v) for k, v in obj.items()}}
+      if isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
             if not obj:
                   return {"type": "array", "items": "unknown"}
+            seen: list = []
+            for s in [infer_schema(i) for i in obj]:
+                  if s not in seen:
+                        seen.append(s)
+            return {"type": "array", "items": seen[0] if len(seen) == 1 else seen}
+      type_map = {str: "string", bool: "boolean", int: "integer", float: "number", type(None): "null"}
+      return {"type": type_map.get(type(obj), type(obj).__name__)}
 
-            item_schemas = [infer_schema(item) for item in obj]
 
-            # Deduplicate
-            unique = []
-            for schema in item_schemas:
-                  if schema not in unique:
-                        unique.append(schema)
-
-            return {"type": "array", "items": unique[0] if len(unique) == 1 else unique}
-
-      elif isinstance(obj, str):
-            return {"type": "string"}
-      elif isinstance(obj, bool):
-            return {"type": "boolean"}
-      elif isinstance(obj, int):
-            return {"type": "integer"}
-      elif isinstance(obj, float):
-            return {"type": "number"}
-      elif obj is None:
-            return {"type": "null"}
-      return {"type": type(obj).__name__}
-
+# ---------------------------------------------------------------------------
+# NDC helpers
+# ---------------------------------------------------------------------------
 
 def ndc_variants(ndc: str) -> list[str]:
-      """
-      Return all plausible 10-digit hyphenated NDC representations
-      for querying the openFDA API.
-      """
+      """Return all plausible 10-digit hyphenated NDC representations."""
       if not isinstance(ndc, str):
             raise TypeError(f"ndc must be str, got {type(ndc).__name__}")
-
       digits = re.sub(r"\D", "", ndc)
       if not digits:
             raise ValueError(f"no digits found in {ndc!r}")
 
-      variants = []
-
+      variants: list[str] = []
       if len(digits) == 10:
-            variants.append(f"{digits[:4]}-{digits[4:8]}-{digits[8:]}")  # 4-4-2
-            variants.append(f"{digits[:5]}-{digits[5:8]}-{digits[8:]}")  # 5-3-2
-            variants.append(f"{digits[:5]}-{digits[5:9]}-{digits[9:]}")  # 5-4-1
-
+            variants = [
+                  f"{digits[:4]}-{digits[4:8]}-{digits[8:]}",  # 4-4-2
+                  f"{digits[:5]}-{digits[5:8]}-{digits[8:]}",  # 5-3-2
+                  f"{digits[:5]}-{digits[5:9]}-{digits[9:]}",  # 5-4-1
+            ]
       elif len(digits) == 11:
             p1, p2, p3 = digits[:5], digits[5:9], digits[9:]
-            if p1.startswith("0"):
-                  variants.append(f"{p1[1:]}-{p2}-{p3}")
-            if p2.startswith("0"):
-                  variants.append(f"{p1}-{p2[1:]}-{p3}")
-            if p3.startswith("0"):
-                  variants.append(f"{p1}-{p2}-{p3[1:]}")
-            if not variants:
-                  variants.append(f"{p1}-{p2}-{p3}")
+            if p1.startswith("0"): variants.append(f"{p1[1:]}-{p2}-{p3}")
+            if p2.startswith("0"): variants.append(f"{p1}-{p2[1:]}-{p3}")
+            if p3.startswith("0"): variants.append(f"{p1}-{p2}-{p3[1:]}")
+            if not variants:       variants.append(f"{p1}-{p2}-{p3}")
       else:
-            raise ValueError(f"expected 10 or 11 digits after stripping separators, "
-                             f"got {len(digits)} from {ndc!r}")
+            raise ValueError(f"expected 10 or 11 digits, got {len(digits)} from {ndc!r}")
 
-      seen = set()
+      seen: set[str] = set()
       return [v for v in variants if not (v in seen or seen.add(v))]
 
 
-def get_queries_result(queries: list[str], fetch_rxcui: bool = False):
-      """
-      Try each query in order. Return the first non-empty result list,
-      or None if nothing matched.
-      """
-      for q in queries:
-            try:
-                  r = requests.get(_URL, params={"search": q, "limit": 100}, timeout=_TIMEOUT)
-            except requests.RequestException as e:
-                  print(f"request failed for query {q!r}: {e}")
-                  continue
-
-            if r.status_code == 404:
-                  # openFDA returns 404 with an error payload when there are no matches
-                  continue
-            if r.status_code != 200:
-                  print(f"unexpected status {r.status_code} for query {q!r}")
-                  continue
-
-            try:
-                  payload = r.json()
-            except ValueError:
-                  continue
-
-            results = payload.get("results") or []
-            if not results:
-                  continue
-
-            return [{
-                  "labeler_name": result.get("labeler_name"),
-                  "brand_name": result.get("brand_name"),
-                  "generic_name": result.get("generic_name"),
-                  "product_ndc": result.get("product_ndc"),
-                  "active_ingredients": result.get("active_ingredients"),
-                  "dosage_form": result.get("dosage_form"),
-                  "route": result.get("route"),
-                  "packaging": result.get("packaging"),
-                  "rxcui": get_all_rxcui(result.get("product_ndc"))
-                  if fetch_rxcui else None
-                     } for result in results]
-
-      return None
-
-
 def _escape_lucene(s: str) -> str:
-      """Escape characters that have special meaning in Lucene query syntax."""
-      # Backslash first, then everything else
       s = s.replace("\\", "\\\\")
       for ch in '+-&|!(){}[]^"~*?:/':
             s = s.replace(ch, f"\\{ch}")
@@ -181,245 +238,206 @@ def _escape_lucene(s: str) -> str:
 
 
 def _norm(s: str) -> str:
-      """Lowercase/ collapse whitespace for loose name comparison."""
       return _WS_RE.sub(" ", (s or "").lower()).strip()
 
 
-def _has_active_ingredient(result: dict, target: str) -> bool:
-      """True if `target` appears as an active ingredient name (substring match,
-      case-insensitive). Substring rather than equality because openFDA names
-      include salts/forms like 'SODIUM CHLORIDE' vs 'sodium chloride 0.9%'."""
-      target = _norm(target)
-      if not target:
-            return False
-      for ai in result.get("active_ingredients") or []:
-            name = _norm(ai.get("name") if isinstance(ai, dict) else ai)
-            if target in name:
-                  return True
-      return False
+# ---------------------------------------------------------------------------
+# openFDA fetch
+# ---------------------------------------------------------------------------
+
+def _fetch(query: str, fetch_rxcui: bool = False) -> list[NdcProduct] | None:
+      try:
+            r = requests.get(_URL, params={"search": query, "limit": 100}, timeout=_TIMEOUT)
+      except requests.RequestException as e:
+            print(f"request failed for {query!r}: {e}")
+            return None
+      if r.status_code == 404:
+            return None
+      if r.status_code != 200:
+            print(f"unexpected status {r.status_code} for {query!r}")
+            return None
+      results = r.json().get("results") or []
+      return [_parse_product(res, fetch_rxcui=fetch_rxcui) for res in results] or None
 
 
-def lookup_ndc_package(package_ndc: str, fetch_rxcui: bool = False):
-      package_ndc = package_ndc.strip()
-      variants = ndc_variants(package_ndc)
+def get_queries_result(queries: list[str], fetch_rxcui: bool = False) -> list[NdcProduct] | None:
+      for q in queries:
+            result = _fetch(q, fetch_rxcui=fetch_rxcui)
+            if result:
+                  return result
+      return None
 
-      # Flatten: try product_ndc match first per variant, then packaging match.
-      # Was: list of tuples (which broke requests).
-      queries = []
-      for v in variants:
-            queries.append(f'package_ndc:"{v}"')
-            queries.append(f'packaging.package_ndc:"{v}"')
 
+# ---------------------------------------------------------------------------
+# Public lookup functions
+# ---------------------------------------------------------------------------
+
+def lookup_ndc_package(package_ndc: str, fetch_rxcui: bool = False) -> list[NdcProduct] | None:
+      variants = ndc_variants(package_ndc.strip())
+      queries = [q for v in variants for q in (f'package_ndc:"{v}"', f'packaging.package_ndc:"{v}"')]
       return get_queries_result(queries, fetch_rxcui=fetch_rxcui)
 
 
-def lookup_generic_name(generic_name: str = None, dosage_form: str = None,
-                        route: str = None, brand_name: str = None,
-                        require_active: bool = False, ingredient_names: Sequence[str] = None,
-                        max_active_ingredients: int = None,
-                        labelers_cleanup: bool = False, fetch_rxcui: bool = False):
-      def _build_query(generic=None, brand=None, ingredients=None, ingredient_wildcard=False, ):
-            """Assemble a Lucene query from optional fields. route/dosage_form
-            come from the enclosing scope since they never change across retries."""
+def lookup_generic_name(
+          generic_name: str = None,
+          dosage_form: str = None,
+          route: str = None,
+          brand_name: str = None,
+          ingredient_names: Sequence[str] = None,
+          max_active_ingredients: int = None,
+          extract_product_type: bool = True,
+          extract_package: bool = True,
+          labelers_cleanup: bool = False,
+          fetch_rxcui: bool = False,
+) -> list[NdcProduct] | None:
+      def _build_query(generic=None, brand=None, ingredients=None, ingredient_wildcard=False):
             parts = []
-
-            if generic:
-                  parts.append(f'generic_name:"{_escape_lucene(generic.strip())}"')
-
-            if brand:
-                  parts.append(f'brand_name:"{_escape_lucene(brand.strip())}"')
-
-            if route:
-                  parts.append(f'route:"{_escape_lucene(route.strip())}"')
-
-            if dosage_form:
-                  parts.append(f'dosage_form:"{_escape_lucene(dosage_form.strip())}"')
-
-            if ingredients:
-                  for ing in ingredients:
-                        ing = ing.strip()
-                        if not ing:
-                              continue
-                        if ingredient_wildcard:
-                              # Wildcard queries can't be quoted in Lucene
-                              parts.append(f"active_ingredients.name:{_escape_lucene(ing)}*")
-                        else:
-                              parts.append(f'active_ingredients.name:"{_escape_lucene(ing)}"')
-
+            if generic:     parts.append(f'generic_name:"{_escape_lucene(generic.strip())}"')
+            if brand:       parts.append(f'brand_name:"{_escape_lucene(brand.strip())}"')
+            if route:       parts.append(f'route:"{_escape_lucene(route.strip())}"')
+            if dosage_form: parts.append(f'dosage_form:"{_escape_lucene(dosage_form.strip())}"')
+            for ing in (ingredients or []):
+                  ing = ing.strip()
+                  if ing:
+                        parts.append(
+                              f"active_ingredients.name:{_escape_lucene(ing)}*"
+                              if ingredient_wildcard
+                              else f'active_ingredients.name:"{_escape_lucene(ing)}"'
+                        )
             return " AND ".join(parts) if parts else None
 
-      def _run(query):
-            if not query:
-                  return []
-            return get_queries_result([query], fetch_rxcui=fetch_rxcui) or []
+      def _run(query) -> list[NdcProduct]:
+            return get_queries_result([query], fetch_rxcui=fetch_rxcui) or [] if query else []
 
-      def _split_combo(name):
-            """Split 'ampicillin and sulbactam' -> ['ampicillin', 'sulbactam'].
-            Returns None if there's no ' and ' to split on."""
+      def _split_combo(name: str) -> list[str] | None:
             if not name or " and " not in name.lower():
                   return None
-            lowered = name.lower()
-            idx = 0
-            parts = []
+            parts, idx = [], 0
             while True:
-                  hit = lowered.find(" and ", idx)
+                  hit = name.lower().find(" and ", idx)
                   if hit == -1:
                         parts.append(name[idx:].strip())
                         break
                   parts.append(name[idx:hit].strip())
-                  idx = hit + len(" and ")
-            return [p for p in parts if p]
+                  idx = hit + 5
+            return [p for p in parts if p] or None
 
-      matched_via = "generic_name" if generic_name else ("brand_name" if brand_name else "other")
+      def _get_product_type(product: NdcProduct) -> str | None:
+            if product.packaging:
+                  types = [
+                        _CAPS_RE.findall(p.description)[0]
+                        for p in product.packaging
+                        if _CAPS_RE.search(p.description)
+                  ]
+                  return ", ".join(set(types)) if types else None
+            return None
 
-      results = _run(_build_query(generic=generic_name, brand=brand_name, ingredients=ingredient_names, ))
+      matched_via: MatchedVia = "generic_name" if generic_name else ("brand_name" if brand_name else "other")
+      results = _run(_build_query(generic=generic_name, brand=brand_name, ingredients=ingredient_names))
 
       if not results and generic_name:
             components = _split_combo(generic_name)
             if components and len(components) > 1:
-                  # First try exact phrases per component
-                  results = _run(_build_query(brand=brand_name, ingredients=components, ingredient_wildcard=False, ))
+                  results = _run(_build_query(brand=brand_name, ingredients=components))
                   if results:
                         matched_via = "generic_name_split"
                   else:
-                        # Wildcard fallback catches salt-suffixed forms
-                        results = _run(
-                              _build_query(brand=brand_name, ingredients=components, ingredient_wildcard=True, ))
+                        results = _run(_build_query(brand=brand_name, ingredients=components, ingredient_wildcard=True))
                         if results:
                               matched_via = "generic_name_split_wildcard"
 
       if not results and generic_name and not brand_name:
-            results = _run(_build_query(brand=generic_name, ingredients=ingredient_names, ))
+            results = _run(_build_query(brand=generic_name, ingredients=ingredient_names))
             if results:
                   matched_via = "generic_as_brand"
 
-      if not results:
-            if require_active:
-                  return None
-            return results
-
-      # ---- Stage 4: brand_name -> generic enrichment ----
-      # If the user gave a brand name and it matched, pull the generic(s) off
-      # the first hit and re-query with both brand AND generic to narrow.
       if brand_name and matched_via == "brand_name":
+            if not results:
+                  components = _split_combo(brand_name)
+                  if components and len(components) > 1:
+                        results = _run(_build_query(ingredients=components, ingredient_wildcard=True))
+                        if results:
+                              matched_via = "brand_name_split_wildcard"
+            if not results:
+                  raise ValueError(f"no results found for brand_name {brand_name!r}")
+
             first = results[0]
-            generic_field = first.get("generic_name")
-            if isinstance(generic_field, list):
-                  discovered_generics = [g for g in generic_field if g]
-            elif generic_field:
-                  discovered_generics = [generic_field]
-            else:
-                  discovered_generics = []
-
-            if discovered_generics:
-                  # AND every discovered generic together with the brand
-                  narrowed_parts = [f'brand_name:"{_escape_lucene(brand_name.strip())}"']
-                  for g in discovered_generics:
-                        narrowed_parts.append(f'generic_name:"{_escape_lucene(g.strip())}"')
-                  if route:
-                        narrowed_parts.append(f'route:"{_escape_lucene(route.strip())}"')
-                  if dosage_form:
-                        narrowed_parts.append(f'dosage_form:"{_escape_lucene(dosage_form.strip())}"')
-
-                  narrowed = get_queries_result([" AND ".join(narrowed_parts)]) or []
+            raw_generic = first.generic_name
+            discovered = (
+                  [g for g in raw_generic if g] if isinstance(raw_generic, list)
+                  else [raw_generic] if raw_generic else []
+            )
+            if discovered:
+                  parts = [f'brand_name:"{_escape_lucene(brand_name.strip())}"']
+                  parts += [f'generic_name:"{_escape_lucene(g.strip())}"' for g in discovered]
+                  if route:       parts.append(f'route:"{_escape_lucene(route.strip())}"')
+                  if dosage_form: parts.append(f'dosage_form:"{_escape_lucene(dosage_form.strip())}"')
+                  narrowed = get_queries_result([" AND ".join(parts)]) or []
                   if narrowed:
-                        results = narrowed
-                        matched_via = "brand_name_narrowed"
+                        results, matched_via = narrowed, "brand_name_narrowed"
 
-      # ---- require_active filter ----
-      if require_active:
-            if not generic_name:
-                  raise ValueError("require_active=True requires generic_name.")
-            results = [r for r in results if _has_active_ingredient(r, generic_name)]
-            if not results:
-                  return None
-
-      # ---- max_active_ingredients filter ----
       if max_active_ingredients is not None:
-            def _count_active(r):
-                  ai = r.get("active_ingredients") or []
-                  return len(ai) if isinstance(ai, list) else 0
-
-            results = [r for r in results if _count_active(r) <= max_active_ingredients]
+            results = [r for r in results if len(r.active_ingredients) <= max_active_ingredients]
             if not results:
                   return None
 
-      # ---- Ranking ----
       rank_key = (generic_name or brand_name or "").lower()
 
-      def _field_str(r, field):
-            n = r.get(field)
-            if isinstance(n, list):
-                  n = n[0] if n else ""
-            return (n or "").lower()
-
-      def _rank(r):
-            generic = _field_str(r, "generic_name")
-            brand = _field_str(r, "brand_name")
-
-            if generic_name:
-                  if generic == rank_key:
-                        return 0
-                  if generic.startswith(rank_key):
-                        return 1
-
-            if brand_name:
-                  if brand == rank_key:
-                        return 0
-                  if brand.startswith(rank_key):
-                        return 1
-
+      def _rank(r: NdcProduct) -> int:
+            generic = _norm(r.generic_name or "")
+            brand = _norm(r.brand_name or "")
+            for key, val in [(generic_name, generic), (brand_name, brand)]:
+                  if key:
+                        if val == rank_key:          return 0
+                        if val.startswith(rank_key): return 1
             return 2
 
       results.sort(key=_rank)
 
-      # Tag each result with how it was found
       for r in results:
-            r["_matched_via"] = matched_via
+            r._matched_via = matched_via
+            if extract_product_type:
+                  r.product_type = _get_product_type(r)
+            if extract_package and r.packaging:
+                  r.packaged_as = extract_package_info(r.packaging[0].description)
+                  r.package_type = r.packaged_as.package_type if r.packaged_as else None
+                  if r.packaged_as and r.packaged_as.package_count == 1:
+                        r.package_size = r.packaged_as.package_size
 
       if labelers_cleanup:
-            df = pd.DataFrame(results)
-            df['labeler_name'] = df['labeler_name'].apply(clean_labeler_name)
-            results = df.to_dict(orient="records")
-            del df
+            for r in results:
+                  if r.labeler_name:
+                        r.labeler_name = clean_labeler_name(r.labeler_name)
 
       return results
 
 
+# ---------------------------------------------------------------------------
+# Labeler directory
+# ---------------------------------------------------------------------------
+
 def clean_labeler_name(name: str) -> str:
-      """Reduce a labeler name to a fuzzy-match-friendly base form."""
-      original = _WS_RE.sub(" ", name).strip()
-      cleaned = _PAREN_RE.sub(" ", original)
+      cleaned = _PAREN_RE.sub(" ", _WS_RE.sub(" ", name).strip())
       cleaned = _DIV_RE.sub("", cleaned).strip()
-      # Repeatedly strip suffixes since names often stack them
       prev = None
       while prev != cleaned:
             prev = cleaned
             cleaned = _SUFFIX_RE.sub("", cleaned).strip()
-      cleaned = _PUNCT_RE.sub(" ", cleaned)
-      cleaned = _WS_RE.sub(" ", cleaned).strip()
-      return cleaned or original
+      cleaned = _WS_RE.sub(" ", _PUNCT_RE.sub(" ", cleaned)).strip()
+      return cleaned or name
 
 
-def get_labeler_directory(reclean: bool = False):
-      """Query for all labelers and return a dict mapping labeler_code to
-      {"name": cleaned_name, "full_name": original_name, "directory": labeler_directory}.
-
-      If reclean=True and the cache exists, re-run clean_labeler_name() on every
-      entry's full_name and rewrite the file. Avoids refetching from openFDA.
-      """
+def get_labeler_directory(reclean: bool = False) -> dict[str, LabelerEntry]:
       try:
             with open(_LABELERS_PATH) as f:
-                  labelers = json.load(f)
+                  raw = json.load(f)
+            labelers = {code: LabelerEntry(**entry) for code, entry in raw.items()}
             if reclean:
                   changed = 0
                   for entry in labelers.values():
-                        full = entry.get("full_name")
-                        if not full:
-                              continue
-                        new_name = clean_labeler_name(full)
-                        if new_name != entry.get("name"):
-                              entry["name"] = new_name
+                        new_name = clean_labeler_name(entry.full_name)
+                        if new_name != entry.name:
+                              entry.name = new_name
                               changed += 1
                   if changed:
                         _write_labelers(labelers)
@@ -428,67 +446,67 @@ def get_labeler_directory(reclean: bool = False):
       except (FileNotFoundError, json.JSONDecodeError):
             pass
 
-      labelers: dict[str, dict] = {}
+      labelers: dict[str, LabelerEntry] = {}
       skip = 0
       while True:
-            r = requests.get(_URL, params={"search": "_exists_:labeler_name", "limit": _PAGE_SIZE, "skip": skip},
-                             timeout=_TIMEOUT, )
+            r = requests.get(
+                  _URL,
+                  params={"search": "_exists_:labeler_name", "limit": _PAGE_SIZE, "skip": skip},
+                  timeout=_TIMEOUT,
+            )
             r.raise_for_status()
             payload = r.json()
             results = payload.get("results") or []
             if not results:
                   break
-            for result in results:
-                  name = result.get("labeler_name")
-                  product_ndc = result.get("product_ndc", "")
-                  code = product_ndc.split("-", 1)[0] if product_ndc else ""
-                  if not (name and code):
-                        continue
-                  if code not in labelers:
-                        labelers[code] = {"name": clean_labeler_name(name), "full_name": name,
-                                          "directory": result.get("labeler_directory"), }
+            for res in results:
+                  name = res.get("labeler_name")
+                  code = (res.get("product_ndc", "") or "").split("-", 1)[0]
+                  if name and code and code not in labelers:
+                        labelers[code] = LabelerEntry(
+                              name=clean_labeler_name(name),
+                              full_name=name,
+                              directory=res.get("labeler_directory"),
+                        )
             total = payload.get("meta", {}).get("results", {}).get("total", 0)
             skip += _PAGE_SIZE
             if skip >= total or skip >= 25000:
                   break
 
       if not labelers:
-            raise ValueError("Labeler directory API returned no results")
-
+            raise ValueError("labeler directory API returned no results")
       labelers = dict(sorted(labelers.items()))
       _write_labelers(labelers)
       return labelers
 
 
-def _write_labelers(labelers: dict) -> None:
-      """Atomic write of the labelers cache."""
+def _write_labelers(labelers: dict[str, LabelerEntry]) -> None:
       _LABELERS_PATH.parent.mkdir(parents=True, exist_ok=True)
       tmp = _LABELERS_PATH.with_suffix(".json.tmp")
       with open(tmp, "w") as f:
-            json.dump(labelers, f, indent=4)
+            json.dump({code: asdict(entry) for code, entry in labelers.items()}, f, indent=4)
       tmp.replace(_LABELERS_PATH)
 
+
+# ---------------------------------------------------------------------------
+# CLI smoke test
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
       get_labeler_directory(reclean=True)
 
-      print("* R1 ****" * 5)
-      r = lookup_ndc_package("0338-0049-02")
-      print(dumps(r, indent=4))
-      print(dumps(infer_schema(r), indent=4, skipkeys=True))
-
-      print("* R2 ****" * 5)
-      r2 = lookup_generic_name("phenylephrine", dosage_form="INJECTION")
-      if r2:
-            print(dumps(r2, indent=4))
-
-      print("* R3 ****" * 5)
-      r3 = lookup_generic_name(ingredient_names=["sodium chloride"], dosage_form="INJECTION", max_active_ingredients=1)
-      if r3:
-            print(dumps(r3, indent=4))
-
-      print("* R4 ****" * 5)
-      r4 = lookup_generic_name(ingredient_names=["sodium chloride"], dosage_form="INJECTION", max_active_ingredients=2)
-      if r4:
-            print(dumps(r4, indent=4))
-            print(dumps(infer_schema(r4), indent=4, skipkeys=True))
+      for label, call in [
+            ("R1", lambda: lookup_ndc_package("0338-0049-02")),
+            ("R2", lambda: lookup_generic_name("phenylephrine", dosage_form="INJECTION")),
+            ("R3", lambda: lookup_generic_name(ingredient_names=["sodium chloride"], dosage_form="INJECTION",
+                                               max_active_ingredients=1)),
+            ("R4", lambda: lookup_generic_name(ingredient_names=["sodium chloride"], dosage_form="INJECTION",
+                                               max_active_ingredients=2)),
+            ("R5", lambda: lookup_generic_name(ingredient_names=["ampicillin sodium", "sulbactam sulbactam"],
+                                               max_active_ingredients=2)),
+            ("R6", lambda: lookup_generic_name(generic_name="penicillin", dosage_form="INJECTION")),
+      ]:
+            print(f"* {label} " + "****" * 5)
+            r = call()
+            if r:
+                  print(dumps([asdict(p) for p in r], indent=4))
