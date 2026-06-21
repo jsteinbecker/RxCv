@@ -9,10 +9,18 @@ try:
       from .fda import lookup_ndc_package, lookup_generic_name
       from .pipeline import Pipeline, PipelineResult
       from .detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
+      from .quantities import (
+            Quantity, PhysicalQuantity, DimensionalityError,
+            mcg, mg, g, kg, mL, L, mmol, mol, mEq, units, percent, each,
+      )
 except ImportError:
       from fda import lookup_ndc_package, lookup_generic_name
       from pipeline import Pipeline, PipelineResult
       from detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
+      from quantities import (
+            Quantity, PhysicalQuantity, DimensionalityError,
+            mcg, mg, g, kg, mL, L, mmol, mol, mEq, units, percent, each,
+      )
 
 # ---------------------------------------------------------------------------
 # expected_components string parser
@@ -103,25 +111,18 @@ def _parse_component_string(s: str) -> dict:
       }
 
 
-@dataclass
-class PhysicalQuantity:
-      value: float | int
-      unit: str
-
-      def __str__(self) -> str:
-            return f"{self.value} {self.unit}"
-
-
-def mL(value): return PhysicalQuantity(value, "mL")
-
-
-def mg(value): return PhysicalQuantity(value, "mg")
-
-
-def mEq(value): return PhysicalQuantity(value, "mEq")
-
-
-def g(value): return PhysicalQuantity(value, "g")
+# ---------------------------------------------------------------------------
+# Physical quantities
+# ---------------------------------------------------------------------------
+# The PhysicalQuantity / Dimension / DimensionalUnit / Measurement stubs that
+# used to live here are now the dimensional system in ``quantities.py``:
+#   * Quantity   -- magnitude + unit, dimension-aware arithmetic
+#   * Dimension  -- exponent vector over base dims (MASS, VOLUME, SUBSTANCE,
+#                   CHARGE, TIME, COUNT, ACTIVITY)
+#   * Unit       -- named scale on a dimension (+ optional activity standard)
+# PhysicalQuantity is kept as an alias of Quantity for backward compatibility,
+# and the mL/mg/mEq/g constructors are imported above (now joined by mcg/L/
+# kg/mmol/mol/units/percent/each).
 
 
 @dataclass
@@ -201,8 +202,8 @@ class Component:
       when the same drug is sold in multiple package sizes).
       """
       product: Product
-      numerator: PhysicalQuantity
-      denominator: PhysicalQuantity
+      numerator: Quantity
+      denominator: Quantity
       quantity: int = 1
       lot: str | None = None
       exp: str | None = None
@@ -210,6 +211,14 @@ class Component:
 
       def __str__(self) -> str:
             return self.describe()
+
+      @property
+      def concentration(self) -> Quantity:
+            """The component concentration as a single dimensioned Quantity,
+            e.g. 10 mg / 1 mL -> 10.0 mg/mL. Dimension-aware, so a mass/volume
+            concentration and an activity/volume concentration are distinguishable.
+            """
+            return self.numerator / self.denominator
 
       def concentration_str(self) -> str:
             return f"{self.numerator}/{self.denominator}"
@@ -450,15 +459,15 @@ if __name__ == "__main__":
             o = Order(id=1002, components=[
                   Component(
                         product=Product.lookup_by_generic_name("phenylephrine", "INJECTION")[0],
-                        numerator=PhysicalQuantity(40, "mg"),
-                        denominator=PhysicalQuantity(4, "mL"),
+                        numerator=Quantity(40, "mg"),
+                        denominator=Quantity(4, "mL"),
                         quantity=4,
                   ),
                   Component(
                         product=Product.lookup_by_generic_name(
                               "0.9% sodium chloride", "INJECTION", "NORMAL SALINE")[0],
-                        numerator=PhysicalQuantity(250, "mL"),
-                        denominator=PhysicalQuantity(250, "mL"),
+                        numerator=Quantity(250, "mL"),
+                        denominator=Quantity(250, "mL"),
                         quantity=1,
                   )
             ])

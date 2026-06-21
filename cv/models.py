@@ -7,7 +7,6 @@ from django.db.models import F, Q
 
 class User(AbstractUser):
       """Pharmacy staff. is_rph distinguishes pharmacists (who can verify) from techs."""
-
       USERNAME_FIELD = "username"
       is_rph = models.BooleanField(default=False)
 
@@ -28,10 +27,11 @@ class Manufacturer(TimeStampedModel):
 
 
 class ManufacturerAlias(TimeStampedModel):
-      """Alternate names a manufacturer appears under on labels (e.g. 'Pfizer Inc.' vs 'Pfizer')."""
+      """Alternately names a manufacturer appears under on labels (e.g. 'Pfizer Inc.' vs 'Pfizer')."""
       name = models.CharField(max_length=255, unique=True)
       manufacturer = models.ForeignKey(Manufacturer, on_delete=models.CASCADE, related_name="aliases")
-      verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_aliases",)
+      verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="verified_aliases", )
 
       def is_verified(self): return self.verifier is not None
 
@@ -39,16 +39,18 @@ class ManufacturerAlias(TimeStampedModel):
 class LabelerCode(TimeStampedModel):
       """The 4-5 digit FDA labeler code, first segment of an NDC."""
       code = models.CharField(max_length=5)
-      manufacturer = models.ForeignKey(Manufacturer, on_delete=models.CASCADE, related_name="labeler_codes",)
-      verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_labeler_codes",)
+      manufacturer = models.ForeignKey(Manufacturer, on_delete=models.CASCADE, related_name="labeler_codes", )
+      verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="verified_labeler_codes", )
 
       class Meta:
             constraints = [
                   models.UniqueConstraint(fields=["manufacturer", "code"], name="unique_mfr_labeler_code"),
-                  models.CheckConstraint(condition=Q(code__regex=r"^\d{4,5}$"), name="labeler_code_format",),
+                  models.CheckConstraint(condition=Q(code__regex=r"^\d{4,5}$"), name="labeler_code_format", ),
             ]
 
       def is_verified(self): return self.verifier is not None
+
       def __str__(self): return self.code
 
 
@@ -62,23 +64,25 @@ class ComponentLibraryEntry(TimeStampedModel):
       code = models.CharField(max_length=10)
       data = models.JSONField(default=dict)
       verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-                            related_name="verified_library_entries", limit_choices_to={"is_rph": True})
+                                   related_name="verified_library_entries", limit_choices_to={"is_rph": True})
 
       class Meta:
-            constraints = [models.UniqueConstraint(fields=["manufacturer", "code"], name="unique_mfr_code"),]
+            constraints = [models.UniqueConstraint(fields=["manufacturer", "code"], name="unique_mfr_code"), ]
 
       def is_verified(self):
             return self.verifier is not None
 
 
-class Compound(TimeStampedModel):
+class CompoundedSterileProduct(TimeStampedModel):
       """
       A single compounding event — the traceability record.
       Ties a pharmacist + timestamp + set of physical containers used.
       """
-      preparer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="prepared_compounds")
-      verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="compounds",
-                              limit_choices_to={"is_rph": True})
+      preparer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   related_name="prepared_compounds")
+      verifier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   related_name="compounds",
+                                   limit_choices_to={"is_rph": True})
       prepared_at = models.DateTimeField(auto_now_add=True)
       notes = models.TextField(blank=True)
       # Optional: formula/recipe FK, lot number assigned to the finished compound, BUD, etc.
@@ -90,7 +94,8 @@ class ComponentInstance(TimeStampedModel):
       facts that the library entry (which describes the type) cannot.
       """
       component = models.ForeignKey(ComponentLibraryEntry, on_delete=models.CASCADE, related_name="instances")
-      compound = models.ForeignKey(Compound, on_delete=models.CASCADE, related_name="components", null=True, blank=True)
+      compound = models.ForeignKey(CompoundedSterileProduct, on_delete=models.CASCADE, related_name="components",
+                                   null=True, blank=True)
       lot_number = models.CharField(max_length=64, blank=True)
       expiration = models.DateField(null=True, blank=True)
       # Add quantity_used + unit if you need to record draw amounts.
@@ -100,7 +105,7 @@ class ImageSet(TimeStampedModel):
       """A batch of label scans captured for one compounding event."""
       timestamp = models.DateTimeField(auto_now_add=True)
       compound = models.OneToOneField(
-            Compound, on_delete=models.CASCADE, related_name="image_set",
+            CompoundedSterileProduct, on_delete=models.CASCADE, related_name="image_set",
             null=True, blank=True,
       )
       captured_by = models.ForeignKey(
@@ -198,15 +203,17 @@ class ImageSegment(TimeStampedModel):
       Links the visual evidence to the ComponentInstance it depicts.
       """
       image = models.ForeignKey(Image, on_delete=models.CASCADE, related_name="segments")
-      result = models.ForeignKey(SegmentationResult, on_delete=models.SET_NULL, null=True, blank=True, related_name="segments",)
+      result = models.ForeignKey(SegmentationResult, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="segments", )
       box = models.JSONField(default=dict)  # expected: {"x": int, "y": int, "w": int, "h": int}
       polygon = models.JSONField(default=list, blank=True)
-      component = models.ForeignKey(ComponentInstance, on_delete=models.SET_NULL, null=True, blank=True, related_name="segments",)
+      component = models.ForeignKey(ComponentInstance, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="segments", )
       kind = models.CharField(max_length=24, choices=SegmentKindChoices.choices, default=SegmentKindChoices.INSTANCE)
       class_label = models.CharField(max_length=128, blank=True)
       instance_id = models.PositiveIntegerField(null=True, blank=True)
       score = models.DecimalField(max_digits=5, decimal_places=3, null=True, blank=True,
-                                  validators=[MinValueValidator(0), MaxValueValidator(1)],)
+                                  validators=[MinValueValidator(0), MaxValueValidator(1)], )
       area_px = models.PositiveIntegerField(null=True, blank=True)
       centroid = models.JSONField(default=dict, blank=True)
 
@@ -223,6 +230,7 @@ class ImageSegment(TimeStampedModel):
                   ),
             ]
 
+
 class OcrRoleChoices(models.IntegerChoices):
       TEXT = 1, "Text"
       COMPONENT_NAME = 2, "Component name"
@@ -233,6 +241,7 @@ class OcrRoleChoices(models.IntegerChoices):
       LOT_NUMBER = 7, "Lot number"
       NDC = 8, "NDC"
       PACKAGE = 9, "Package"
+
 
 class OcrToken(TimeStampedModel):
       token = models.TextField()

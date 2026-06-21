@@ -280,6 +280,7 @@ def match_against_reference(
           threshold: float = ASSIGNMENT_THRESHOLD,
           force_assign: bool = False,
           priority_ndcs: frozenset[str] | None = None,
+          scdc_groups: dict[str, frozenset[str]] | None = None,
 ) -> ReferenceMatch:
       """Assign every subsequent detection to a reference slot, or to out-of-inventory.
 
@@ -305,6 +306,11 @@ def match_against_reference(
             score boost so the Hungarian solver prefers it even when visual
             similarity alone is borderline. Requires visual_sim ≥
             VISUAL_FLOOR_FOR_LOT_OVERRIDE to guard against mis-pairings.
+        scdc_groups: Mapping of NDC → frozenset of SCDC CUIs (ingredient+strength
+            identity) pre-fetched from RxNorm. When two detections have different
+            NDCs but overlapping SCDC sets (e.g. 5 mL vs 15 mL of the same drug),
+            a mild score boost is applied so volume variants don't get routed
+            out-of-inventory. Requires visual_sim ≥ VISUAL_FLOOR_FOR_LOT_OVERRIDE.
 
     Returns:
         ReferenceMatch with slots, per-detection assignments, and per-image reports.
@@ -379,6 +385,7 @@ def match_against_reference(
                   embeddings, field_records, threshold, assignments,
                   force_assign=force_assign,
                   priority_ndcs=priority_ndcs,
+                  scdc_groups=scdc_groups,
             )
             image_reports.append(report)
 
@@ -400,6 +407,7 @@ def _assign_one_image(
           assignments_out: list[Assignment],
           force_assign: bool = False,
           priority_ndcs: frozenset[str] | None = None,
+          scdc_groups: dict[str, frozenset[str]] | None = None,
 ) -> ImageReport:
       """Run Hungarian assignment for one subsequent image. Appends to assignments_out.
 
@@ -414,6 +422,11 @@ def _assign_one_image(
     appear in this set gets a strong score boost (threshold + 0.25) if visual
     similarity is at least VISUAL_FLOOR_FOR_LOT_OVERRIDE. This surfaces
     order-level knowledge (expected NDCs, scanned barcodes) into the solver.
+
+    scdc_groups: when provided, pairs whose NDCs resolve to overlapping SCDC
+    component sets (same drug identity, possibly different package volume) receive
+    a mild additive boost (W_SCDC = 0.08), enough to keep them above threshold
+    without overriding stronger OCR or lot signals.
     """
       n_sub = len(sub_indices)
       n_ref = len(ref_indices)
@@ -474,6 +487,30 @@ def _assign_one_image(
                                   and visual_sims[i, j] >= VISUAL_FLOOR_FOR_LOT_OVERRIDE
                         ):
                               scores[i, j] = max(scores[i, j], threshold + 0.25)
+
+      # SCDC group boost: same drug identity (ingredient+strength) even when NDCs
+      # differ. Fires for volume variants (e.g. 5 mL vs 15 mL of sodium phosphate)
+      # that share SCDC component CUIs. Additive rather than threshold-override so
+      # it can push borderline pairs over the threshold without trumping lot or
+      # exact-NDC signals on clearly-different pairs.
+      W_SCDC = 0.08
+      if scdc_groups:
+            for i, sub_i in enumerate(sub_indices):
+                  for j, ref_j in enumerate(ref_indices):
+                        f_sub = field_records[sub_i]
+                        f_ref = field_records[ref_j]
+                        sub_ndc = f_sub.barcode_ndc or f_sub.ndc
+                        ref_ndc = f_ref.barcode_ndc or f_ref.ndc
+                        if sub_ndc and ref_ndc and sub_ndc == ref_ndc:
+                              continue  # exact-NDC match already scored
+                        sub_scdc = scdc_groups.get(sub_ndc) if sub_ndc else None
+                        ref_scdc = scdc_groups.get(ref_ndc) if ref_ndc else None
+                        if (
+                                  sub_scdc and ref_scdc
+                                  and sub_scdc & ref_scdc
+                                  and visual_sims[i, j] >= VISUAL_FLOOR_FOR_LOT_OVERRIDE
+                        ):
+                              scores[i, j] = min(1.0, scores[i, j] + W_SCDC)
 
       # Hungarian solver minimizes cost; we want to maximize score.
       # scipy's linear_sum_assignment handles rectangular matrices and returns
@@ -549,10 +586,7 @@ def _assign_one_image(
 def summarize(match: ReferenceMatch) -> dict:
       """Quick stats useful for human-readable reports or JSON output."""
       n_slots = len(match.slots)
-      out: dict = {
-            "n_reference_slots": n_slots,
-            "per_image": [],
-      }
+      out: dict = {"n_reference_slots": n_slots, "per_image": [], }
       # Group slots by their describe() string to surface duplicate inventory items.
       desc_counts = Counter(s.describe() for s in match.slots)
       out["inventory_grouped"] = [
