@@ -19,34 +19,32 @@ from __future__ import annotations
 import json
 from typing import cast
 
-try:
-      from ..tests.fixtures.raw_input import RAW  # when imported as a package
-except ImportError:  # when run as a flat script
-      from tests.fixtures.raw_input import RAW
+from ..tests.fixtures.raw_input import RAW  # when imported as a package
 
 # ---------------------------------------------------------------------------
 # Drug database. In production this is a lookup against an NDC directory (FDA's
 # NDC Directory, First Databank, etc.). Hardcoded here from ground truth.
 # ---------------------------------------------------------------------------
 NDC_DB = {"0264-7800-10": {"drug": "Sodium Chloride 0.9% (NS)", "strength": "250 mL", "manufacturer": "Baxter",
-      "form": "iv bag", },
-      "0009-0224-20": {"drug": "Ceftazidime-Avibactam", "strength": "2.5 g", "manufacturer": "Pfizer",
-            "form": "vial", }, }
+                           "form": "iv bag", },
+          "0009-0224-20": {"drug": "Ceftazidime-Avibactam", "strength": "2.5 g", "manufacturer": "Pfizer",
+                           "form": "vial", }, }
 
 # Lot-only fallback. When no NDC is read but we have a lot, we can still group.
 # In a real system this maps lot -> product via the manufacturer's lot registry.
 LOT_DB = {"308777251000": {"drug": "(unidentified — lot 308777251000)", "strength": None, "manufacturer": None,
-      "form": "vial", },
-      "HK3092": {"drug": "Sterile Water for Injection", "strength": "20 mL", "manufacturer": None, "form": "vial", },
-      "2JD588": {"drug": "Sodium Chloride 0.9% (NS)", "strength": "250 mL", "manufacturer": "Baxter",
-            "form": "iv bag", }, }
+                           "form": "vial", },
+          "HK3092": {"drug": "Sterile Water for Injection", "strength": "20 mL", "manufacturer": None,
+                     "form": "vial", },
+          "2JD588": {"drug": "Sodium Chloride 0.9% (NS)", "strength": "250 mL", "manufacturer": "Baxter",
+                     "form": "iv bag", }, }
 
 # Class priority: when two detections cover the same bbox, prefer the more
 # specific/correct label. Higher number = preferred.
 CLASS_PRIORITY = {"iv bag": 5, "vial": 4, "bottle": 2,  # often a misclassification of vial
-      "bag": 1,  # usually a misclassification of vial/bottle
-      "filter": 0,  # almost always a phantom/non-product detection
-}
+                  "bag": 1,  # usually a misclassification of vial/bottle
+                  "filter": 0,  # almost always a phantom/non-product detection
+                  }
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +81,7 @@ def mask_iou(a, b) -> float:
 def _public_detection_dict(d: dict) -> dict:
       """Remove large internal arrays before returning audit records."""
       return {k: v for k, v in d.items() if not k.startswith("_")}
+
 
 def frame_coverage(bbox: list[int], img_w: int, img_h: int) -> float:
       x1, y1, x2, y2 = bbox
@@ -167,7 +166,8 @@ def clean_detections(detections: list[dict], image_dims: dict, iou_thresh: float
                         parent = other["instance_id"]
                         break
                   if is_reflection:
-                        rejected_reflection.append({**_public_detection_dict(d), "_reject_reason": f"reflection_of_instance={parent}", })
+                        rejected_reflection.append(
+                              {**_public_detection_dict(d), "_reject_reason": f"reflection_of_instance={parent}", })
                   else:
                         survivors2.append(d)
       survivors = survivors2
@@ -184,7 +184,7 @@ def clean_detections(detections: list[dict], image_dims: dict, iou_thresh: float
             # Sort detections so the "best" representative wins each merge.
             # Rank by (class priority, score) descending.
             dets_sorted = sorted(dets, key=lambda d: (CLASS_PRIORITY.get(d["class_label"], 0), d["score"]),
-                  reverse=True, )
+                                 reverse=True, )
 
             keep: list[dict] = []
             absorbed_into: dict[int, list[int]] = {}
@@ -210,9 +210,9 @@ def clean_detections(detections: list[dict], image_dims: dict, iou_thresh: float
                         absorbed_id_key = cast(int | str, cast(object, d["instance_id"]))
                         absorbed_into.setdefault(kept_id_key, []).append(absorbed_id_key)
                         merged_log.append({"kept_instance": k["instance_id"], "kept_class": k["class_label"],
-                              "absorbed_instance": d["instance_id"], "absorbed_class": d["class_label"],
-                              "iou": round(iou(d["bbox"], k["bbox"]), 3),
-                              "mask_iou": round(mask_iou(d.get("_mask"), k.get("_mask")), 3), })
+                                           "absorbed_instance": d["instance_id"], "absorbed_class": d["class_label"],
+                                           "iou": round(iou(d["bbox"], k["bbox"]), 3),
+                                           "mask_iou": round(mask_iou(d.get("_mask"), k.get("_mask")), 3), })
 
             cleaned.extend(_public_detection_dict(k) for k in keep)
 
@@ -343,8 +343,8 @@ def match(reference: list[dict], candidate: list[dict]) -> dict:
                   slot = ref_pool[key].pop(0)
                   assignments.append(
                         {"candidate_instance": c["instance_id"], "matched_reference_instance": slot["instance_id"],
-                              "match_key": key, "match_type": "hard", "score": 1.0, "out_of_inventory": False,
-                              "needs_human_review": False, })
+                         "match_key": key, "match_type": "hard", "score": 1.0, "out_of_inventory": False,
+                         "needs_human_review": False, })
             else:
                   deferred.append(c)
 
@@ -362,14 +362,15 @@ def match(reference: list[dict], candidate: list[dict]) -> dict:
                   slot = pool.pop(0)
                   assignments.append(
                         {"candidate_instance": c["instance_id"], "matched_reference_instance": slot["instance_id"],
-                              "match_key": ("class", cls), "match_type": "soft_class_only", "score": 0.4,
-                              "out_of_inventory": False, "needs_human_review": True,
-                              "review_reason": ("Matched by class label only — OCR did not recover NDC/lot, "
-                                                "so product identity is unverified."), })
+                         "match_key": ("class", cls), "match_type": "soft_class_only", "score": 0.4,
+                         "out_of_inventory": False, "needs_human_review": True,
+                         "review_reason": ("Matched by class label only — OCR did not recover NDC/lot, "
+                                           "so product identity is unverified."), })
             else:
                   assignments.append({"candidate_instance": c["instance_id"], "matched_reference_instance": None,
-                        "match_key": product_key(c), "match_type": "unmatched", "score": 0.0, "out_of_inventory": True,
-                        "needs_human_review": True, })
+                                      "match_key": product_key(c), "match_type": "unmatched", "score": 0.0,
+                                      "out_of_inventory": True,
+                                      "needs_human_review": True, })
 
       unmatched_reference = [r["instance_id"] for slots in remaining_ref_by_class.values() for r in slots]
       return {"assignments": assignments, "unmatched_reference": unmatched_reference}
@@ -410,7 +411,8 @@ def run():
             {"instance_id": r["instance_id"], "class_label": r["class_label"], "reason": r["_reject_reason"]} for r in
             rejected_reflection], "merge_log": merged_log,
             "cleaned_detection_count_per_image": {img: sum(1 for d in resolved if d["source_image"] == img) for img in
-                  RAW["images"]}, "rx3_inventory": rollup(ref), "rx4_inventory": rollup(cand), "matches": matches,
+                                                  RAW["images"]}, "rx3_inventory": rollup(ref),
+            "rx4_inventory": rollup(cand), "matches": matches,
             "resolved_detections": resolved, }
 
 

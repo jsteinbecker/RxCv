@@ -38,14 +38,9 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 # Imports support both package (python -m) and script (python pipeline.py) invocation.
-try:
-      from .detection import Detection
-      from .embedding import cosine_similarity_matrix
-      from ..ocr.ocr_fields import OCRFields
-except ImportError:
-      from detection.detection import Detection
-      from detection.embedding import cosine_similarity_matrix
-      from ocr.ocr_fields import OCRFields
+from .detection import Detection
+from .embedding import cosine_similarity_matrix
+from ..ocr.ocr_fields import OCRFields
 
 # Score weights for the hybrid match metric.
 # When a barcode-confirmed NDC match is available it replaces the OCR-NDC term

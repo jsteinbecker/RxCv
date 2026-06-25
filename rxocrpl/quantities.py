@@ -1,132 +1,89 @@
-"""Dimensional quantity system for pharmacy modeling.
+"""
+Dimensional Quantity System for Pharmacy Modeling
+=================================================
 
-Quantities are represented as vectors over a deliberately small set of base
-dimensions chosen for compounding workflows, rather than the full seven SI base
-dimensions. Most SI dimensions do not appear directly in pharmacy calculations,
-so this system uses pharmacy-native dimensions instead.
+Quantities are represented as vectors over a deliberately small set of base dimensions chosen for compounding workflows,
+rather than the full seven SI base dimensions. Most SI dimensions do not appear directly in pharmacy calculations, so
+this system uses **pharmacy-native dimensions** instead.
 
-## Base dimensions
+---
 
-`MASS`
-Base unit: gram.
+Base Dimensions
+---------------
 
-```
-Supported units include ``mcg``, ``mg``, ``g``, and ``kg``.
-```
+The following pharmacy-native dimensions are supported.
 
-`VOLUME`
-Base unit: litre.
 
-```
-Supported units include ``mL`` and ``L``.
+| Dimension | Base Unit | Supported Units | Implementation Notes |
+| --- | --- | --- | --- |
+| **`MASS`** | gram | `mcg`, `mg`, `g`, `kg` |  |
+| **`VOLUME`** | litre | `mL`, `L` | Treated as a first-class pharmacy dimension, not as `L**3` or as a derived length-cubed dimension. |
+| **`SUBSTANCE`** | mole | `mmol`, `mol` |  |
+| **`CHARGE`** | equivalent | `mEq`, `Eq` | Represents moles of ionic charge, *not* electrical charge in coulombs. |
+| **`TIME`** | second | `s`, `min`, `hr`, `day` |  |
+| **`COUNT`** | each | *(Discrete)* | Used for countable pharmacy objects (e.g., dosage units, packages, containers, vials, tablets, capsules, syringes, bags). |
+| **`ACTIVITY`** | unit | *(Variable)* | Used for USP Units, International Units, and other biological activity units tied to a reference standard. |
 
-Volume is treated as a first-class pharmacy dimension, not as ``L**3`` or
-as a derived length-cubed dimension.
-```
 
-`SUBSTANCE`
-Base unit: mole.
+## Design Rules
 
-```
-Supported units include ``mmol`` and ``mol``.
-```
+### Intrinsic Conversions
 
-`CHARGE`
-Base unit: equivalent.
+Conversions within a single dimension are **intrinsic** to the quantity system. They operate universally and do not
+require substance-specific knowledge.
 
-```
-Supported units include ``mEq`` and ``Eq``.
+**Examples:**
 
-This represents moles of ionic charge, not electrical charge in coulombs.
-```
+* `mg` to `g`
+* `mcg` to `mg`
+* `mL` to `L`
+* `hr` to `s`
 
-`TIME`
-Base unit: second.
+---
 
-```
-Supported units include ``s``, ``min``, ``hr``, and ``day``.
-```
+### Bridge Conversions
 
-`COUNT`
-Base unit: each.
+Conversions between different dimensions are **not automatic**.
 
-```
-Used for discrete dosage units, packages, containers, vials, tablets,
-capsules, syringes, bags, and other countable pharmacy objects.
-```
+**Examples:**
 
-`ACTIVITY`
-Base unit: unit.
+* `mg` to `mmol`
+* `mmol` to `mEq`
+* `mg` to `Units`
 
-```
-Used for USP Units, International Units, and other biological activity
-units tied to a reference standard.
-```
+> **Architectural Rule:** Bridge conversions require substance-specific bridge factors. These factors belong strictly to
+the `Substance` or bridge-conversion layer, *not* to the generic `Quantity` type.
 
-## Design rules
+**Common Bridge Factors Include:**
 
-Intrinsic conversions
+* Molar mass
+* Valence
+* Salt form
+* Hydration state
+* Concentration basis
+* Specific activity
+* Biological reference standard
 
-```
+---
 
-Conversions within a single dimension are intrinsic to the quantity system.
-
-Examples:
-
-* ``mg`` to ``g``
-* ``mcg`` to ``mg``
-* ``mL`` to ``L``
-* ``hr`` to ``s``
-
-These conversions do not require substance-specific knowledge.
-
-Bridge conversions
-~~~~~~~~~~~~~~~~~~
-
-Conversions between dimensions are not automatic.
-
-Examples:
-
-* ``mg`` to ``mmol``
-* ``mmol`` to ``mEq``
-* ``mg`` to ``Units``
-
-These conversions require substance-specific bridge factors, such as:
-
-* molar mass
-* valence
-* salt form
-* hydration state
-* concentration basis
-* specific activity
-* biological reference standard
-
-Those bridge factors belong to the ``Substance`` or bridge-conversion layer,
-not to the generic ``Quantity`` type.
-
-Activity standards
-~~~~~~~~~~~~~~~~~~
+### Activity Standards
 
 Biological activity units are not universally commensurable.
 
-For example:
+**Examples of Incompatibility:**
 
-* ``1 IU`` of heparin is not equivalent to ``1 IU`` of insulin.
-* ``1 USP Unit`` of one drug is not necessarily comparable to ``1 USP Unit``
-  of another drug.
+* `1 IU` of heparin is **not equivalent** to `1 IU` of insulin.
+* `1 USP Unit` of one drug is **not comparable** to `1 USP Unit` of another drug.
 
-For this reason, quantities on the ``ACTIVITY`` axis may carry an optional
-``standard`` tag identifying the biological reference standard.
-
-Activities may only be added, compared, or converted when their standards are
-compatible. Combining activities with different standards is an error, even
-though they share the same ``ACTIVITY`` dimension.
-```
+> **Important:** For this reason, quantities on the `ACTIVITY` axis may carry an optional `standard` tag identifying the
+biological reference standard. Activities may *only* be added, compared, or converted when their standards are compatible.
+Combining activities with different standards is an error, even though they share the same `ACTIVITY` dimension.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Any, Union
 
 
 class Base(IntEnum):
@@ -271,6 +228,20 @@ define("", DIMENSIONLESS, 1.0)
 
 
 def _resolve(symbol: str) -> Unit:
+      """
+      Resolves a given unit symbol to a corresponding unit definition. This function searches
+      for the symbol in predefined sets of units and aliases. If the symbol corresponds to
+      a simple composite unit in the form "a/b", it will be parsed, and the resulting
+      composite unit will be registered and returned. If the symbol cannot be resolved,
+      an exception is raised.
+
+      :param symbol: The unit symbol to resolve. It can be a predefined symbol, an alias,
+          or a composite unit in the form "a/b".
+      :type symbol: str
+      :return: The resolved unit object corresponding to the given symbol.
+      :rtype: Unit
+      :raises KeyError: If the symbol cannot be resolved to a known unit or alias.
+      """
       if symbol in _UNITS:
             return _UNITS[symbol]
       if symbol in _ALIASES:

@@ -36,7 +36,7 @@ INSTALLED_APPS = [
       'django.contrib.messages',
       'django.contrib.staticfiles',
       'cv.apps.CvConfig',
-      'rx_norm.apps.RxNormConfig'
+      'rxocrpl.apps.RxOcrPlConfig'
 ]
 
 MIDDLEWARE = [
