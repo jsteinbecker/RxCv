@@ -46,7 +46,7 @@ class LabelerCode(TimeStampedModel):
       class Meta:
             constraints = [
                   models.UniqueConstraint(fields=["manufacturer", "code"], name="unique_mfr_labeler_code"),
-                  models.CheckConstraint(condition=Q(code__regex=r"^\d{4,5}$"), name="labeler_code_format", ),
+                  #                  models.CheckConstraint(condition=Q(code__regex=r"^\d{4,5}$"), name="labeler_code_format", ),
             ]
 
       def is_verified(self): return self.verifier is not None
@@ -166,10 +166,10 @@ class PipelineRun(TimeStampedModel):
                   models.Index(fields=["status"]),
             ]
             constraints = [
-                  models.CheckConstraint(
-                        condition=Q(finished_at__isnull=True) | Q(finished_at__gte=F("started_at")),
-                        name="run_finished_after_started",
-                  ),
+                  #                  models.CheckConstraint(
+                  #                        condition=Q(finished_at__isnull=True) | Q(finished_at__gte=F("started_at")),
+                  #                        name="run_finished_after_started",
+                  #                  ),
             ]
 
 

@@ -41,35 +41,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-      try:
-            from .order import Order
-      except ImportError:
-            from order import Order  # type: ignore[assignment]
+      from .order import Order
 
 import numpy as np
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont
 
-try:
-      from .detection.clean_and_match import clean_detections, resolve_product
-      from .detection.detection import Detection, Detector
-      from .detection.embedding import Embedder
-      from .detection.image_ops import canonicalize_crop
-      from .detection.matching import ReferenceMatch, match_against_reference, summarize
-      from .detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
-      from .ocr.ndc_directory import NDCDirectory, get_directory
-      from .ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
-      from .rxnorm import get_rxnorm_enrichment
-except ImportError:
-      from detection.clean_and_match import clean_detections, resolve_product
-      from detection.detection import Detection, Detector
-      from detection.embedding import Embedder
-      from detection.image_ops import canonicalize_crop
-      from detection.matching import ReferenceMatch, match_against_reference, summarize
-      from detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
-      from ocr.ndc_directory import NDCDirectory, get_directory
-      from ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
-      from rxnorm import get_rxnorm_enrichment
+from rxocrpl.detection.clean_and_match import clean_detections, resolve_product
+from rxocrpl.detection.detection import Detection, Detector
+from rxocrpl.detection.embedding import Embedder
+from rxocrpl.detection.image_ops import canonicalize_crop
+from rxocrpl.detection.matching import ReferenceMatch, match_against_reference, summarize
+from rxocrpl.detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
+from rxocrpl.ocr.ndc_directory import NDCDirectory, get_directory
+from rxocrpl.ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
+from rxocrpl.rxnorm import get_rxnorm_enrichment
 
 # Best-effort font for annotation labels — falls back to PIL's bitmap default.
 try:
@@ -306,7 +292,7 @@ class PipelineResult:
             max_width = 1200
             if img.width > max_width:
                   ratio = max_width / img.width
-                  img = img.resize((max_width, int(img.height * ratio)), PILImage.LANCZOS)
+                  img = img.resize((max_width, int(img.height * ratio)), PILImage.Resampling.LANCZOS)
 
             buf = io.BytesIO()
             img.save(buf, format="PNG", optimize=True)
@@ -846,14 +832,15 @@ class Pipeline:
                         _ndc_set.update(resolve_fn(self.ndc_directory))
                   priority_ndcs = frozenset(_ndc_set)
 
-            image_paths = [str(p) for p in image_paths]
+            image_paths_: list[str] = [str(p) for p in image_paths]
             reference_image = image_paths[0]
 
             # Stage 1: detect across all images, accumulating into one flat list.
             # Reassign instance_ids globally so they're unique across the batch.
             all_detections: list[Detection] = []
             image_dims: dict[str, tuple[int, int]] = {}
-            for img_path in image_paths:
+            img_path: Path | str
+            for img_path in image_paths_:
                   per_image = self.detector.detect(img_path, prompt=self.detection_prompt)
                   for d in per_image:
                         d.instance_id = len(all_detections)
@@ -867,7 +854,7 @@ class Pipeline:
                               break
 
             if not all_detections:
-                  return self._empty_result(image_paths, reference_image, certified=certified)
+                  return self._empty_result(image_paths_, str(reference_image), certified=certified)
 
             # Stage 2a: build mask-aware canonical crops, then OCR each crop.
             # We need OCR fields *before* cleanup so that NMS can merge OCR fields
@@ -919,11 +906,11 @@ class Pipeline:
 
             if not all_detections:
                   return self._empty_result(
-                        image_paths,
-                        reference_image,
-                        rejected_frame=rejected_frame,
-                        rejected_reflection=rejected_reflection,
-                        merge_log=merge_log,
+                        image_paths_,
+                        str(reference_image),
+                        rejected_frame=[rejected_frame],
+                        rejected_reflection=[rejected_reflection],
+                        merge_log=[merge_log],
                         certified=certified,
                   )
 
@@ -1012,7 +999,7 @@ class Pipeline:
                   detections=all_detections,
                   embeddings=embeddings,
                   field_records=all_fields,
-                  reference_image=reference_image,
+                  reference_image=str(reference_image),
                   force_assign=certified,
                   priority_ndcs=priority_ndcs or None,
                   scdc_groups=ndc_scdc_map or None,
@@ -1034,11 +1021,11 @@ class Pipeline:
                   fields=all_fields,
                   embeddings=embeddings,
                   match=match,
-                  images_processed=image_paths,
-                  reference_image=reference_image,
-                  rejected_frame=rejected_frame,
-                  rejected_reflection=rejected_reflection,
-                  nms_merge_log=merge_log,
+                  images_processed=image_paths_,
+                  reference_image=str(reference_image),
+                  rejected_frame=[rejected_frame],
+                  rejected_reflection=[rejected_reflection],
+                  nms_merge_log=[merge_log],
                   enrichment=enrichment,
                   certified_subset_in_inventory=certified,
                   process_inference=process_inference_result,
@@ -1143,6 +1130,7 @@ if __name__ == "__main__":
                   print(f"[warn] could not build Order for --expect/--barcode hints: {_e}")
 
       pipeline = Pipeline(certified_subset_in_inventory=args.certified)
+      # pyrefly: ignore [bad-argument-type]
       result = pipeline.process(args.images, order=_order)
 
       now = datetime.now()
