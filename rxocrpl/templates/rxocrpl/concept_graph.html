@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RxNorm Graph - {{ concept.rxcui }}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <style>
+        #cy {
+            width: 100%;
+            height: 600px;
+            display: block;
+            border: 1px solid #ccc;
+        }
+
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+
+        .info {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="info">
+    <h1>{{ concept.name }}</h1>
+    <p><strong>RXCUI:</strong> {{ concept.rxcui }} | <strong>TTY:</strong> {{ concept.tty }}</p>
+</div>
+
+<div id="cy"></div>
+
+{{ graph_data|json_script:"graph-data" }}
+<script>
+    var cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: [],
+        style: [
+            {
+                selector: 'node',
+                style: {
+                    'background-color': 'data(color)',
+                    'label': 'data(label)',
+                    'text-wrap': 'wrap',
+                    'text-valign': 'center',
+                    'text-halign': 'center',
+                    'font-size': '10px',
+                    'width': '60px',
+                    'height': '60px',
+                    'color': '#333'
+                }
+            },
+            {
+                selector: 'node[tty]',
+                style: {
+                    'background-color': function (node) {
+                        var tty = node.data('tty');
+                        if (node.data('color')) return node.data('color');
+                        var colors = {
+                            'SCD': '#6fb1fc',
+                            'SCDC': '#eda1ed',
+                            'IN': '#86ecad',
+                            'PIN': '#f5d63d',
+                            'BN': '#f5a352'
+                        };
+                        return colors[tty] || '#ccc';
+                    }
+                }
+            },
+            {
+                selector: 'edge',
+                style: {
+                    'width': 2,
+                    'line-color': '#ccc',
+                    'target-arrow-color': '#ccc',
+                    'target-arrow-shape': 'triangle',
+                    'curve-style': 'bezier',
+                    'label': 'data(label)',
+                    'font-size': '8px',
+                    'text-rotation': 'autorotate',
+                    'text-margin-y': -10
+                }
+            }
+        ],
+        layout: {
+            name: 'cose',
+            animate: true
+        }
+    });
+
+    const graphData = JSON.parse(document.getElementById('graph-data').textContent);
+    cy.add(graphData);
+    cy.layout({name: 'cose'}).run();
+
+    cy.on('tap', 'node', function (evt) {
+        var node = evt.target;
+        if (node.id() !== '{{ concept.rxcui }}') {
+            window.location.href = '{% url "rxocrpl:concept_graph" "000000" %}'.replace('000000', node.id());
+        }
+    });
+</script>
+</body>
+</html>

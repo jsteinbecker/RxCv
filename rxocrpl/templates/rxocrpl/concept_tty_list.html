@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RxNorm Concepts - {{ tty }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.5;
+            color: #333;
+        }
+
+        h1 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .tty-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: bold;
+            background-color: #eee;
+            margin-right: 10px;
+        }
+
+        .tty-SCD {
+            background-color: #6fb1fc;
+            color: #fff;
+        }
+
+        .tty-SCDC {
+            background-color: #eda1ed;
+            color: #fff;
+        }
+
+        .tty-IN {
+            background-color: #86ecad;
+            color: #333;
+        }
+
+        .tty-PIN {
+            background-color: #f5d63d;
+            color: #333;
+        }
+
+        .tty-BN {
+            background-color: #f5a352;
+            color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background-color: #f8f9fa;
+        }
+
+        tr:hover {
+            background-color: #fcfcfc;
+        }
+
+        .actions a {
+            text-decoration: none;
+            color: #007bff;
+            font-weight: 500;
+        }
+
+        .actions a:hover {
+            text-decoration: underline;
+        }
+
+        .rxcui {
+            font-family: monospace;
+            background: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+<h1>
+    <span class="tty-badge tty-{{ tty }}">{{ tty }}</span>
+    RxNorm Concepts
+</h1>
+
+<p>Showing all concepts with Term Type <strong>{{ tty }}</strong>.</p>
+
+<table>
+    <thead>
+    <tr>
+        <th>RXCUI</th>
+        <th>Name</th>
+        <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for concept in concepts %}
+        <tr>
+            <td><span class="rxcui">{{ concept.rxcui }}</span></td>
+            <td>{{ concept.name }}</td>
+            <td class="actions">
+                <a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}">View Graph</a>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="3">No concepts found for this TTY.</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</body>
+</html>
