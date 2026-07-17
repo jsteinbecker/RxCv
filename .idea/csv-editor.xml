@@ -10,6 +10,27 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/rxocrpl/db/NDCs__CAPS.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/rxocrpl/db/NDCs__Nephron.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/rxocrpl/db/NDCs__Quva.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/rxocrpl/db/ndcproduct.csv">
           <value>
             <Attribute>

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional, cast
 
 try:
       from .fda import lookup_ndc_package, lookup_generic_name
@@ -13,6 +13,7 @@ try:
             Quantity, PhysicalQuantity, DimensionalityError,
             mcg, mg, g, kg, mL, L, mmol, mol, mEq, units, percent, each,
       )
+      from .models import Product, Component, CspOrder as OrderModel
 except ImportError:
       from fda import lookup_ndc_package, lookup_generic_name
       from pipeline import Pipeline, PipelineResult
@@ -21,6 +22,12 @@ except ImportError:
             Quantity, PhysicalQuantity, DimensionalityError,
             mcg, mg, g, kg, mL, L, mmol, mol, mEq, units, percent, each,
       )
+      try:
+            from models import Product, Component, CspOrder as OrderModel
+      except ImportError:
+            Product = None
+            Component = None
+            OrderModel = None
 
 # ---------------------------------------------------------------------------
 # expected_components string parser
@@ -50,8 +57,10 @@ _DRUG_ABBREVIATIONS: dict[str, str] = {
 }
 
 _STRENGTH_RE = re.compile(
-      r"(\d+(?:\.\d+)?)\s*(g|mg|mcg|ug|units?|u|mEq|%|mL|ML|L)"
-      r"(?:\s*/\s*(\d+(?:\.\d+)?)\s*(g|mg|mcg|ug|units?|u|mEq|%|mL|ML|L))?",
+      r"(\d+(?:\.\d+)?)"
+      r"\s*(g|mg|mcg|ug|units?|u|mEq|%|mL|ML|L)"
+      r"(?:\s*/\s*(\d+(?:\.\d+)?)"
+      r"\s*(g|mg|mcg|ug|units?|u|mEq|%|mL|ML|L))?",
       re.IGNORECASE,
 )
 
@@ -123,121 +132,6 @@ def _parse_component_string(s: str) -> dict:
 # PhysicalQuantity is kept as an alias of Quantity for backward compatibility,
 # and the mL/mg/mEq/g constructors are imported above (now joined by mcg/L/
 # kg/mmol/mol/units/percent/each).
-
-
-@dataclass
-class Product:
-      generic_name: str
-      brand_name: str | None
-      labeler_name: str
-      product_ndc: str
-      active_ingredients: List[Dict[str, str]]
-      dosage_form: str
-      route: list[str]
-      rxcui: Dict[str, tuple[str, str]] = field(default_factory=dict)
-
-      def __str__(self) -> str:
-            return self.describe()
-
-      def __eq__(self, other: object) -> bool:
-            if not isinstance(other, Product):
-                  return NotImplemented
-            return (self.generic_name == other.generic_name
-                    and self.brand_name == other.brand_name
-                    and self.labeler_name == other.labeler_name
-                    and self.product_ndc == other.product_ndc
-                    and self.active_ingredients == other.active_ingredients
-                    and self.dosage_form == other.dosage_form
-                    and self.route == other.route)
-
-      def __hash__(self) -> int:
-            return hash(self.generic_name + self.brand_name + self.labeler_name + self.product_ndc + str(
-                  self.active_ingredients) + self.dosage_form + str(self.route))
-
-      @classmethod
-      def from_fda_result(cls, result: dict) -> "Product":
-            return cls(
-                  generic_name=result.get("generic_name", ""),
-                  brand_name=result.get("brand_name"),
-                  labeler_name=result.get("labeler_name", ""),
-                  product_ndc=result.get("product_ndc", ""),
-                  active_ingredients=result.get("active_ingredients") or [],
-                  dosage_form=result.get("dosage_form", ""),
-                  route=result.get("route") or [],
-                  rxcui=result.get("rxcui") or {},
-            )
-
-      @classmethod
-      def lookup_by_ndc(cls, ndc: str, fetch_rxcui: bool = True) -> "Product | None":
-            results = lookup_ndc_package(ndc, fetch_rxcui=fetch_rxcui)
-            if results:
-                  return cls.from_fda_result(results[0])
-            return None
-
-      @classmethod
-      def lookup_by_generic_name(
-                cls, generic_name: str, dosage_form: str | None = None, brand_name: str | None = None,
-                fetch_rxcui: bool = True
-      ) -> "list[Product]":
-            results = lookup_generic_name(generic_name, dosage_form, fetch_rxcui=fetch_rxcui)
-            if results:
-                  return [cls.from_fda_result(r) for r in results]
-            return []
-
-      def describe(self) -> str:
-            parts = [self.generic_name]
-            if self.brand_name and self.brand_name.upper() != self.generic_name.upper():
-                  parts.append(f"({self.brand_name})")
-            if self.dosage_form:
-                  parts.append(self.dosage_form)
-            return " ".join(parts)
-
-
-@dataclass
-class Component:
-      """One drug component within a compounded or prepared order.
-
-      numerator/denominator encode concentration: e.g. 10 mg / 1 mL.
-      package_ndc is the NDC of the specific package (may differ from product_ndc
-      when the same drug is sold in multiple package sizes).
-      """
-      product: Product
-      numerator: Quantity
-      denominator: Quantity
-      quantity: int = 1
-      lot: str | None = None
-      exp: str | None = None
-      package_ndc: str | None = None
-
-      def __str__(self) -> str:
-            return self.describe()
-
-      @property
-      def concentration(self) -> Quantity:
-            """The component concentration as a single dimensioned Quantity,
-            e.g. 10 mg / 1 mL -> 10.0 mg/mL. Dimension-aware, so a mass/volume
-            concentration and an activity/volume concentration are distinguishable.
-            """
-            return self.numerator / self.denominator
-
-      def concentration_str(self) -> str:
-            return f"{self.numerator}/{self.denominator}"
-
-      def describe(self) -> str:
-            parts = [self.product.generic_name, self.concentration_str()]
-            if self.product.dosage_form:
-                  parts.append(self.product.dosage_form)
-            if self.quantity != 1:
-                  parts.append(f"x{self.quantity}")
-            return " ".join(parts)
-
-      def matches_ndc(self, ndc: str) -> bool:
-            """True if *ndc* (package or product) belongs to this component."""
-            if self.package_ndc and self.package_ndc == ndc:
-                  return True
-            if self.product.product_ndc and self.product.product_ndc == ndc:
-                  return True
-            return False
 
 
 @dataclass
@@ -383,9 +277,9 @@ class Order:
 
             images = [str(self.reference_image)] + [str(p_str) for p_str in self.verification_images]
             pr = pipeline.process(
-                  images,
+                  image_paths=images,
                   certified_subset_in_inventory=self.certified_subset,
-                  order=self,
+                  order=cast(Any, self)
             )
             # When fully-specified Component objects are available, prefer them
             # over the pipeline's enrichment-derived inference (more authoritative).
@@ -450,57 +344,80 @@ class Order:
 
             return verifications
 
+      def to_dict(self) -> dict[str, Any]:
+            return {
+                  "id": self.id,
+                  "components": [c.to_dict() for c in self.components],
+                  "scanned_barcodes": self.scanned_barcodes,
+                  "expected_components": self.expected_components,
+                  "reference_image": str(self.reference_image) if self.reference_image else None,
+                  "verification_images": [str(img) for img in self.verification_images],
+                  "certified_subset": self.certified_subset,
+            }
+
 
 if __name__ == "__main__":
       from json import dumps
 
 
       def levo_40mg_250ml_ns():
-            o = Order(id=1002, components=[
-                  Component(
-                        product=Product.lookup_by_generic_name("phenylephrine", "INJECTION")[0],
-                        numerator=Quantity(40, "mg"),
-                        denominator=Quantity(4, "mL"),
-                        quantity=4,
-                  ),
-                  Component(
-                        product=Product.lookup_by_generic_name(
-                              "0.9% sodium chloride", "INJECTION", "NORMAL SALINE")[0],
-                        numerator=Quantity(250, "mL"),
-                        denominator=Quantity(250, "mL"),
-                        quantity=1,
-                  )
-            ])
+            om = OrderModel(id=1002)
+            c1 = Component(
+                  order=om,
+                  product=Product.lookup_by_generic_name("phenylephrine", "INJECTION")[0],
+                  quantity=4,
+            )
+            c1.numerator = Quantity(40, "mg")
+            c1.denominator = Quantity(4, "mL")
+
+            c2 = Component(
+                  order=om,
+                  product=Product.lookup_by_generic_name(
+                        "0.9% sodium chloride", "INJECTION", "NORMAL SALINE")[0],
+                  quantity=1,
+            )
+            c2.numerator = Quantity(250, "mL")
+            c2.denominator = Quantity(250, "mL")
+
+            o = Order(id=1002, components=[c1, c2])
             return o
 
 
-      o = levo_40mg_250ml_ns()
-      print(dumps(asdict(o), indent=4))
+      print(dumps(levo_40mg_250ml_ns().to_dict(), indent=4))
 
 
       def cisplatin_70mg_20meq_K_1000mL_NS():
-            o = Order(id=1003, components=[
-                  Component(
-                        product=Product.lookup_by_generic_name("cisplatin", "INJECTION")[0],
-                        numerator=mg(70),
-                        denominator=mL(70),
-                        quantity=1,
-                  ),
-                  Component(
-                        product=Product.lookup_by_generic_name("Potassium Chloride", "CONCENTRATE")[0],
-                        numerator=mEq(20),
-                        denominator=mL(10),
-                        quantity=1,
-                  ),
-                  Component(
-                        product=Product.lookup_by_generic_name("Sodium Chloride", "INJECTION")[0],
-                        numerator=mL(1000),
-                        denominator=mL(1000),
-                        quantity=1,
-                  )
-            ])
+            om = OrderModel(id=1003)
+            c1 = Component(
+                  order=om,
+                  product=Product.lookup_by_generic_name("cisplatin", "INJECTION")[0],
+                  quantity=1,
+            )
+            c1.numerator = mg(70)
+            c1.denominator = mL(70)
+
+            c2 = Component(
+                  order=om,
+                  product=Product.lookup_by_generic_name("Potassium Chloride", "CONCENTRATE")[0],
+                  quantity=1,
+            )
+            c2.numerator = mEq(20)
+            c2.denominator = mL(10)
+
+            c3 = Component(
+                  order=om,
+                  product=Product.lookup_by_generic_name("Sodium Chloride", "INJECTION")[0],
+                  quantity=1,
+            )
+            c3.numerator = mL(1000)
+            c3.denominator = mL(1000)
+
+            o = Order(id=1003, components=[c1, c2, c3])
             return o
 
 
-      o = cisplatin_70mg_20meq_K_1000mL_NS()
-      print(dumps(asdict(o), indent=4))
+      print(dumps(cisplatin_70mg_20meq_K_1000mL_NS().to_dict(), indent=4))
+
+      ns = lookup_generic_name('sodium chloride', dosage_form='INJECTION', extract_package=True)
+      if ns:
+            print(dumps(_parse_product(ns[0]).rxcui, indent=4))

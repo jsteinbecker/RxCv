@@ -38,9 +38,14 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 # Imports support both package (python -m) and script (python pipeline.py) invocation.
-from .detection import Detection
-from .embedding import cosine_similarity_matrix
-from ..ocr.ocr_fields import OCRFields
+try:
+      from .detection import Detection
+      from .embedding import cosine_similarity_matrix
+      from ..ocr.ocr_fields import OCRFields
+except ImportError:
+      from rxocrpl.detection.detection import Detection
+      from rxocrpl.detection.embedding import cosine_similarity_matrix
+      from rxocrpl.ocr.ocr_fields import OCRFields
 
 # Score weights for the hybrid match metric.
 # When a barcode-confirmed NDC match is available it replaces the OCR-NDC term
@@ -578,17 +583,21 @@ def _assign_one_image(
 # ---------------------------------------------------------------------------
 
 
-def summarize(match: ReferenceMatch) -> dict:
+def summarize(match: ReferenceMatch) -> dict[str, object]:
       """Quick stats useful for human-readable reports or JSON output."""
       n_slots = len(match.slots)
-      out: dict = {"n_reference_slots": n_slots, "per_image": [], }
+      per_image: list[dict[str, object]] = []
+      out: dict[str, object] = {
+            "n_reference_slots": n_slots,
+            "per_image": per_image,
+      }
       # Group slots by their describe() string to surface duplicate inventory items.
       desc_counts = Counter(s.describe() for s in match.slots)
       out["inventory_grouped"] = [
             {"description": desc, "count": cnt} for desc, cnt in desc_counts.most_common()
       ]
       for report in match.image_reports:
-            entry = {
+            entry: dict[str, object] = {
                   "image": report.source_image,
                   "is_reference": report.is_reference,
                   "detections": report.detection_count,
@@ -606,5 +615,5 @@ def summarize(match: ReferenceMatch) -> dict:
                         }
                         for sid in report.missing_slot_ids
                   ]
-            out["per_image"].append(entry)
+            per_image.append(entry)
       return out

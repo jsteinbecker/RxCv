@@ -21,7 +21,7 @@ Design notes
 from __future__ import annotations
 
 import dataclasses
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from django.apps import apps as django_apps
 from django.db import transaction
@@ -168,7 +168,6 @@ def fetch_family(
       bare ingredient can pull in hundreds of products -- for that, a bulk RRF
       load is more appropriate than per-edge REST calls).
       """
-      rxcui = str(rxcui)
       keep = frozenset(tty_filter)
 
       nodes: dict[str, Node] = {}
@@ -247,7 +246,7 @@ def materialize_concept(
           max_nodes: int = 2000,
           strength_resolver: Optional[StrengthResolver] = None,
 ) -> MaterializeResult:
-      """Fetch + persist ``rxcui``'s concept neighborhood. Idempotent.
+      """Fetch and persist ``rxcui``'s concept neighborhood. Idempotent.
 
       Returns a :class:`MaterializeResult`. Existing rows are updated in place
       (``update_or_create`` on ``rxcui``); existing edges are left untouched.
@@ -268,7 +267,7 @@ def materialize_concept(
       # ---- write phase (one transaction) ----
       now = timezone.now()
       with transaction.atomic():
-            concepts, created_c = _upsert_nodes(concept_model, graph.nodes, release, now)
+            concepts, created_c = _upsert_nodes(concept_model, graph.nodes, now)
             relations, created_r = _upsert_edges(
                   relation_model, concepts, graph.nodes, graph.edges, strength_resolver
             )
@@ -284,18 +283,16 @@ def materialize_concept(
       )
 
 
-def _upsert_nodes(concept_model, nodes, release, now):
+def _upsert_nodes(concept_model, nodes, now):
       out: dict[str, object] = {}
       created = 0
       for node in nodes.values():
             defaults = {
-                  "tty": node.tty,
-                  "name": node.name,
+                  "tty": node.tty or "",
+                  "name": node.name or "",
                   "active": node.active,
                   "synced_at": now,
             }
-            if release:
-                  defaults["rxnorm_release"] = release
             obj, was_created = concept_model.objects.update_or_create(
                   rxcui=node.rxcui, defaults=defaults
             )
@@ -345,7 +342,6 @@ def _upsert_edges(relation_model, concepts, nodes, edges, strength_resolver):
       return out, created
 
 
-# Convenience alias matching the "add a concept" phrasing.
 def add_concept(rxcui: str, **kwargs) -> object:
       """Materialize ``rxcui`` and return the anchor RxNormConcept instance."""
       return materialize_concept(rxcui, **kwargs).anchor
@@ -364,14 +360,20 @@ def add_concept_by_name(name: str, **kwargs) -> object:
       return add_concept(rxcui, **kwargs)
 
 
-def add_concept_by_ndc(ndc: str, **kwargs) -> object:
-      """Resolve ``ndc`` to an RXCUI via rxnorm.enrichment and materialize its graph.
+def add_concept_by_ndc(ndc: str, **kwargs: Any) -> Optional[object]:
+      """Resolve ``ndc`` to an RXCUI via ProductRxNormMapping or rxnorm.enrichment and materialize its graph.
 
       Returns the anchor RxNormConcept or ``None`` if the NDC cannot be resolved.
       """
+      concept_model, _ = _resolve_models()
+      from rxocrpl.models import ProductRxNormMapping
+      mapping = ProductRxNormMapping.objects.filter(product_ndc=ndc).first()
+      if mapping:
+            return add_concept(mapping.rxcui, **kwargs)
+
       from rxocrpl.rxnorm.enrichment import get_rxnorm_enrichment
       enrichment = get_rxnorm_enrichment(ndc)
-      rxcui = enrichment.rxcui
+      rxcui = enrichment.concept_rxcui
       if not rxcui:
             return None
       return add_concept(rxcui, **kwargs)

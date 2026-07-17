@@ -62,7 +62,7 @@ def demo_volume_grouping(ndc: str) -> None:
       group = get_volume_group_key(concept_rxcui)
       print(f"Volume group:    {group}")
       print(f"Group key:       {group.key}")
- 
+
       if group.kind == "scd" and group.base:
             variants = get_quantified_forms(group.base.rxcui)
             print(f"Variants ({len(variants)}):")
@@ -96,3 +96,5 @@ if __name__ == "__main__":
 
       demo_enrichment("0641-0497")
       demo_basic_ndc("0641-0497")
+      demo_enrichment("65145-0129-25")
+      demo_basic_ndc("65145-0129-25")

@@ -19,7 +19,10 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from ..tests.fixtures.raw_input import RAW  # when imported as a package
+try:
+      from rxocrpl.tests.fixtures.raw_input import RAW  # when imported as a package
+except ImportError:
+      from tests.fixtures.raw_input import RAW  # when run standalone
 
 # ---------------------------------------------------------------------------
 # Drug database. In production this is a lookup against an NDC directory (FDA's
@@ -108,7 +111,7 @@ def _ensure_hashable_id(value) -> int | str:
 
 def clean_detections(detections: list[dict], image_dims: dict, iou_thresh: float = 0.7, coverage_thresh: float = 0.80,
                      reflection_y_overlap: float = 0.05, reflection_x_overlap: float = 0.30,
-                     mask_iou_thresh: float = 0.60) -> list[dict]:
+                     mask_iou_thresh: float = 0.60) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
       # Normalize all instance_ids to hashable types upfront and rebuild list
       normalized: list[dict] = []
       for d in detections:
@@ -187,7 +190,7 @@ def clean_detections(detections: list[dict], image_dims: dict, iou_thresh: float
                                  reverse=True, )
 
             keep: list[dict] = []
-            absorbed_into: dict[int, list[int]] = {}
+            absorbed_into: dict[int | str, list[int | str]] = {}
             for d in dets_sorted:
                   matched_idx = None
                   for i, k in enumerate(keep):
@@ -380,6 +383,7 @@ def match(reference: list[dict], candidate: list[dict]) -> dict:
 # Pipeline
 # ---------------------------------------------------------------------------
 def run():
+      # pyrefly: ignore [bad-argument-type]
       cleaned, rejected_frame, rejected_reflection, merged_log = clean_detections(RAW["detections"], RAW["image_dims"])
       resolved = [resolve_product(d) for d in cleaned]
       resolved = propagate_class_labels(resolved)
@@ -410,8 +414,9 @@ def run():
             rejected_frame], "rejected_reflection_detections": [
             {"instance_id": r["instance_id"], "class_label": r["class_label"], "reason": r["_reject_reason"]} for r in
             rejected_reflection], "merge_log": merged_log,
-            "cleaned_detection_count_per_image": {img: sum(1 for d in resolved if d["source_image"] == img) for img in
-                                                  RAW["images"]}, "rx3_inventory": rollup(ref),
+            "cleaned_detection_count_per_image": {
+                  str(img): sum(1 for d in resolved if str(d["source_image"]) == str(img)) for img in RAW["images"]
+            }, "rx3_inventory": rollup(ref),
             "rx4_inventory": rollup(cand), "matches": matches,
             "resolved_detections": resolved, }
 

@@ -38,7 +38,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, List
 
 if TYPE_CHECKING:
       from .order import Order
@@ -47,15 +47,20 @@ import numpy as np
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont
 
-from rxocrpl.detection.clean_and_match import clean_detections, resolve_product
-from rxocrpl.detection.detection import Detection, Detector
-from rxocrpl.detection.embedding import Embedder
-from rxocrpl.detection.image_ops import canonicalize_crop
-from rxocrpl.detection.matching import ReferenceMatch, match_against_reference, summarize
-from rxocrpl.detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
-from rxocrpl.ocr.ndc_directory import NDCDirectory, get_directory
-from rxocrpl.ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
-from rxocrpl.rxnorm import get_rxnorm_enrichment
+from .detection.clean_and_match import clean_detections, resolve_product
+from .detection.detection import Detection, Detector
+from .detection.embedding import Embedder
+from .detection.image_ops import canonicalize_crop
+from .detection.matching import (
+      ReferenceMatch,
+      match_against_reference,
+      summarize,
+      Assignment,
+)
+from .detection.process_inference import ProcessInferenceManager, ProcessInferenceResult
+from .ocr.ndc_directory import NDCDirectory, get_directory
+from .ocr.ocr_fields import FieldExtractor, OCRFields, extract_ndc
+from .rxnorm import get_rxnorm_enrichment
 
 # Best-effort font for annotation labels — falls back to PIL's bitmap default.
 try:
@@ -74,7 +79,7 @@ _COLOR_UNKNOWN = (160, 160, 160)  # gray — no assignment info
 
 def _det_color(
           det: Detection,
-          assignment,  # Assignment | None
+          assignment: Optional[Assignment],
           reference_image: str,
 ) -> tuple[int, int, int]:
       if assignment is None:
@@ -148,7 +153,7 @@ class PipelineResult:
                   per_image[d.class_label] = per_image.get(d.class_label, 0) + 1
             return out
 
-      def to_dict(self) -> dict:
+      def to_dict(self) -> dict[str, Any]:
             """Serializable summary. Excludes mask/crop/embedding arrays."""
             return {
                   "reference_image": self.reference_image,
@@ -614,7 +619,7 @@ class PipelineResult:
             return "\n".join(lines)
 
 
-def _detection_to_clean_dict(d: Detection, fields: OCRFields) -> dict:
+def _detection_to_clean_dict(d: Detection, fields: OCRFields) -> dict[str, Any]:
       """Project a Detection + its OCR fields into the dict shape clean_detections expects."""
       return {
             "instance_id": d.instance_id,
@@ -751,9 +756,8 @@ class Pipeline:
             self.certified_subset_in_inventory = certified_subset_in_inventory
 
       @property
-      def ndc_directory(self) -> NDCDirectory | None:
+      def ndc_directory(self: Pipeline) -> NDCDirectory | None:
             """Lazy-load the FDA NDC Directory for OCR enrichment.
-
         Falls back to None (graceful skip) if the CSV isn't present.
         """
             if self._ndc_directory is None:
@@ -765,9 +769,9 @@ class Pipeline:
 
       def process(
                 self,
-                image_paths: list[str | Path],
-                certified_subset_in_inventory: bool | None = None,
-                order: Order | None = None,
+                image_paths: List[str],
+                certified_subset_in_inventory: Optional[bool] = None,
+                order: Optional['Order'] = None,
       ) -> PipelineResult:
             """Run all stages on a batch of images.
 
@@ -841,7 +845,7 @@ class Pipeline:
             image_dims: dict[str, tuple[int, int]] = {}
             img_path: Path | str
             for img_path in image_paths_:
-                  per_image = self.detector.detect(img_path, prompt=self.detection_prompt)
+                  per_image = self.detector.detect(img_path, detector_prompt=self.detection_prompt)
                   for d in per_image:
                         d.instance_id = len(all_detections)
                         all_detections.append(d)
@@ -908,9 +912,9 @@ class Pipeline:
                   return self._empty_result(
                         image_paths_,
                         str(reference_image),
-                        rejected_frame=[rejected_frame],
-                        rejected_reflection=[rejected_reflection],
-                        merge_log=[merge_log],
+                        rejected_frame=rejected_frame,
+                        rejected_reflection=rejected_reflection,
+                        merge_log=merge_log,
                         certified=certified,
                   )
 
@@ -1023,9 +1027,9 @@ class Pipeline:
                   match=match,
                   images_processed=image_paths_,
                   reference_image=str(reference_image),
-                  rejected_frame=[rejected_frame],
-                  rejected_reflection=[rejected_reflection],
-                  nms_merge_log=[merge_log],
+                  rejected_frame=rejected_frame,
+                  rejected_reflection=rejected_reflection,
+                  nms_merge_log=merge_log,
                   enrichment=enrichment,
                   certified_subset_in_inventory=certified,
                   process_inference=process_inference_result,
@@ -1033,11 +1037,11 @@ class Pipeline:
 
       @staticmethod
       def _empty_result(
-                image_paths: list[str],
+                image_paths: List[str],
                 reference_image: str,
-                rejected_frame: list[dict] | None = None,
-                rejected_reflection: list[dict] | None = None,
-                merge_log: list[dict] | None = None,
+                rejected_frame: List[dict] | None = None,
+                rejected_reflection: List[dict] | None = None,
+                merge_log: List[dict] | None = None,
                 certified: bool = False,
       ) -> PipelineResult:
             empty_match = ReferenceMatch(slots=[], assignments=[], image_reports=[])
@@ -1056,7 +1060,11 @@ class Pipeline:
 
 
 if __name__ == "__main__":
+      import sys
+      from pathlib import Path
       import argparse
+
+      sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
       parser = argparse.ArgumentParser(
             prog="rxocrpl.pipeline",

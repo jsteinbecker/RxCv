@@ -166,6 +166,13 @@ def _parse_packaging(raw: list[dict] | None) -> list[NdcPackaging]:
 
 
 def _parse_product(res: dict, fetch_rxcui: bool = False) -> NdcProduct:
+      # Extract RXCUI strings from the nested dictionary structure
+      rxcui_result = None
+      if fetch_rxcui and res.get("product_ndc"):
+            rxcui_dict = get_all_rxcui(res.get("product_ndc"))
+            if rxcui_dict:
+                  rxcui_result = list(set([ndc.rxcui for ndc_list in rxcui_dict.values() for ndc in ndc_list]))
+
       return NdcProduct(
             labeler_name=res.get("labeler_name"),
             brand_name=res.get("brand_name"),
@@ -175,7 +182,7 @@ def _parse_product(res: dict, fetch_rxcui: bool = False) -> NdcProduct:
             dosage_form=res.get("dosage_form"),
             route=res.get("route"),
             packaging=_parse_packaging(res.get("packaging")),
-            rxcui=get_all_rxcui(res.get("product_ndc")) if fetch_rxcui else None,
+            rxcui=rxcui_result,
       )
 
 
@@ -194,8 +201,9 @@ def infer_schema(obj):
                   if s not in seen:
                         seen.append(s)
             return {"type": "array", "items": seen[0] if len(seen) == 1 else seen}
-      type_map = {str: "string", bool: "boolean", int: "integer", float: "number", type(None): "null"}
-      return {"type": type_map.get(type(obj), type(obj).__name__)}
+      type_map: dict[type, str] = {str: "string", bool: "boolean", int: "integer", float: "number", type(None): "null"}
+      obj_type = type(obj)
+      return {"type": type_map.get(obj_type, obj_type.__name__)}
 
 
 # ---------------------------------------------------------------------------
@@ -203,28 +211,41 @@ def infer_schema(obj):
 # ---------------------------------------------------------------------------
 
 def ndc_variants(ndc: str) -> list[str]:
-      """Return all plausible 10-digit hyphenated NDC representations."""
+      """Return all plausible hyphenated NDC representations."""
       if not isinstance(ndc, str):
             raise TypeError(f"ndc must be str, got {type(ndc).__name__}")
-      digits = re.sub(r"\D", "", ndc)
-      if not digits:
-            raise ValueError(f"no digits found in {ndc!r}")
 
       variants: list[str] = []
+      if "-" in ndc:
+            variants.append(ndc)
+
+      digits = re.sub(r"\D", "", ndc)
+      if not digits:
+            if variants: return variants
+            raise ValueError(f"no digits found in {ndc!r}")
+
       if len(digits) == 10:
-            variants = [
+            variants.extend([
                   f"{digits[:4]}-{digits[4:8]}-{digits[8:]}",  # 4-4-2
                   f"{digits[:5]}-{digits[5:8]}-{digits[8:]}",  # 5-3-2
                   f"{digits[:5]}-{digits[5:9]}-{digits[9:]}",  # 5-4-1
-            ]
+            ])
       elif len(digits) == 11:
             p1, p2, p3 = digits[:5], digits[5:9], digits[9:]
             if p1.startswith("0"): variants.append(f"{p1[1:]}-{p2}-{p3}")
             if p2.startswith("0"): variants.append(f"{p1}-{p2[1:]}-{p3}")
             if p3.startswith("0"): variants.append(f"{p1}-{p2}-{p3[1:]}")
             if not variants:       variants.append(f"{p1}-{p2}-{p3}")
-      else:
-            raise ValueError(f"expected 10 or 11 digits, got {len(digits)} from {ndc!r}")
+      elif len(digits) == 8:
+            variants.extend([
+                  f"{digits[:5]}-{digits[5:]}",  # 5-3
+                  f"{digits[:4]}-{digits[4:]}",  # 4-4
+            ])
+      elif len(digits) == 9:
+            variants.append(f"{digits[:5]}-{digits[5:]}")  # 5-4
+
+      if not variants:
+            variants.append(ndc)
 
       seen: set[str] = set()
       return [v for v in variants if not (v in seen or seen.add(v))]
@@ -246,17 +267,29 @@ def _norm(s: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _fetch(query: str, fetch_rxcui: bool = False) -> list[NdcProduct] | None:
-      try:
-            r = requests.get(_URL, params={"search": query, "limit": 100}, timeout=_TIMEOUT)
-      except requests.RequestException as e:
-            print(f"request failed for {query!r}: {e}")
+      def _execute(q):
+            try:
+                  print(f"fetching {q!r} from openFDA...")
+                  r = requests.get(_URL, params={"search": q, "limit": 100}, timeout=_TIMEOUT)
+                  if r.status_code == 200:
+                        return r.json().get("results") or []
+                  if r.status_code == 404:
+                        return []
+                  print(f"unexpected status {r.status_code} for {q!r}")
+                  return None
+            except requests.RequestException as e:
+                  print(f"request failed for {q!r}: {e}")
+                  return None
+
+      results = _execute(query)
+
+      if results is not None and not results and "finished:" not in query:
+            # If it runs through all its contingencies and still doesn't have a result
+            # for an NDC, add the finished:false to the query and attempt with that as well
+            results = _execute(f"{query} AND finished:false")
+
+      if not results:
             return None
-      if r.status_code == 404:
-            return None
-      if r.status_code != 200:
-            print(f"unexpected status {r.status_code} for {query!r}")
-            return None
-      results = r.json().get("results") or []
       return [_parse_product(res, fetch_rxcui=fetch_rxcui) for res in results] or None
 
 
@@ -274,17 +307,18 @@ def get_queries_result(queries: list[str], fetch_rxcui: bool = False) -> list[Nd
 
 def lookup_ndc_package(package_ndc: str, fetch_rxcui: bool = False) -> list[NdcProduct] | None:
       variants = ndc_variants(package_ndc.strip())
-      queries = [q for v in variants for q in (f'package_ndc:"{v}"', f'packaging.package_ndc:"{v}"')]
+      fields = ["package_ndc", "packaging.package_ndc", "product_ndc"]
+      queries = [f'{field}:"{v}"' for v in variants for field in fields]
       return get_queries_result(queries, fetch_rxcui=fetch_rxcui)
 
 
 def lookup_generic_name(
-          generic_name: str = None,
-          dosage_form: str = None,
-          route: str = None,
-          brand_name: str = None,
-          ingredient_names: Sequence[str] = None,
-          max_active_ingredients: int = None,
+          generic_name: str | None = None,
+          dosage_form: str | None = None,
+          route: str | None = None,
+          brand_name: str | None = None,
+          ingredient_names: Sequence[str] | None = None,
+          max_active_ingredients: int | None = None,
           extract_product_type: bool = True,
           extract_package: bool = True,
           labelers_cleanup: bool = False,
@@ -497,6 +531,7 @@ if __name__ == "__main__":
 
       for label, call in [
             ("R1", lambda: lookup_ndc_package("0338-0049-02")),
+            ("R1b", lambda: lookup_ndc_package("70092-0004-37")),
             ("R2", lambda: lookup_generic_name("phenylephrine", dosage_form="INJECTION")),
             ("R3", lambda: lookup_generic_name(ingredient_names=["sodium chloride"], dosage_form="INJECTION",
                                                max_active_ingredients=1)),

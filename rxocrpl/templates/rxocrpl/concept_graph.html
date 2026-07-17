@@ -1,36 +1,155 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>RxNorm Graph - {{ concept.rxcui }}</title>
+{% extends "base.html" %}
+
+{% block title %}RxNorm Graph - {{ concept.rxcui }} · RxCv{% endblock %}
+
+{% block extra_head %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
     <style>
+        .graph-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 1.5rem;
+            height: 700px;
+        }
         #cy {
             width: 100%;
-            height: 600px;
-            display: block;
-            border: 1px solid #ccc;
+            height: 100%;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            background: #fff;
         }
-
-        body {
-            font-family: sans-serif;
-            margin: 20px;
+        .controls {
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
         }
-
-        .info {
-            margin-bottom: 20px;
+        .details-panel {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 11px;
+            color: var(--fg-secondary);
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .node-info-card {
+            border-left: 4px solid var(--brand);
+            padding-left: 0.75rem;
+        }
+        .node-info-card h4 {
+            margin: 0;
+            font-size: 14px;
+        }
+        .tty-badge {
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: var(--bg-app);
+            color: var(--fg-tertiary);
+            border: 1px solid var(--border-default);
         }
     </style>
-</head>
-<body>
-<div class="info">
-    <h1>{{ concept.name }}</h1>
-    <p><strong>RXCUI:</strong> {{ concept.rxcui }} | <strong>TTY:</strong> {{ concept.tty }}</p>
+{% endblock %}
+
+{% block content %}
+<div style="font-size: 0.85rem; color: var(--fg-muted); margin-bottom: 1rem;">
+    <a href="{% url 'rxocrpl:index' %}" style="color: var(--brand); text-decoration: none;">RxOCR Pipeline</a> &rsaquo;
+    <a href="{% url 'rxocrpl:concept_tty_list' concept.tty %}" style="color: var(--brand); text-decoration: none;">{{ concept.tty }} Concepts</a> &rsaquo;
+    {{ concept.name }}
 </div>
 
-<div id="cy"></div>
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <h1 style="margin:0">{{ concept.name }}</h1>
+            <p style="margin:0"><strong>RXCUI:</strong> {{ concept.rxcui }} | <strong>TTY:</strong> {{ concept.tty }}</p>
+        </div>
+        <div class="controls">
+            <a href="{% url 'rxocrpl:concept_tty_list' concept.tty %}" class="button button-secondary">← {{ concept.tty }} List</a>
+            <button class="button button-secondary" onclick="runLayout('dagre')">Hierarchical</button>
+            <button class="button button-secondary" onclick="runLayout('cose')">Force-Directed</button>
+            <button class="button button-secondary" onclick="cy.fit()">Fit</button>
+        </div>
+    </div>
+</div>
+
+<div class="graph-layout">
+    <div id="cy"></div>
+    <div class="details-panel" id="details-panel">
+        <h3 style="margin:0">Concept Details</h3>
+        <div id="details-content">
+            <p class="caption">Click a node to see more information.</p>
+        </div>
+        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 0.5rem 0;">
+        <h4 style="margin:0">Legend (TTY)</h4>
+        <div class="legend" id="legend"></div>
+    </div>
+</div>
 
 {{ graph_data|json_script:"graph-data" }}
+
 <script>
+    const COLORS = {
+        'SCD': '#3a7bd5',
+        'SBD': '#1e40af',
+        'SCDC': '#c026d3',
+        'SBDC': '#86198f',
+        'IN': '#059669',
+        'PIN': '#10b981',
+        'BN': '#ea580c',
+        'SCDG': '#d97706',
+        'SBDG': '#92400e',
+        'DEFAULT': '#94a0b0'
+    };
+
+    const TTY_LABELS = {
+        'IN': 'Ingredient',
+        'PIN': 'Precise Ingredient',
+        'SCDC': 'Clinical Component',
+        'SBDC': 'Branded Component',
+        'SCD': 'Clinical Drug',
+        'SBD': 'Branded Drug',
+        'BN': 'Branded Name',
+        'SCDG': 'Clinical Dose Form Group',
+        'SBDG': 'Branded Dose Form Group'
+    };
+
+    // Initialize legend
+    const legendEl = document.getElementById('legend');
+    Object.keys(COLORS).forEach(tty => {
+        if (tty === 'DEFAULT') return;
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `<div class="legend-color" style="background: ${COLORS[tty]}"></div><span>${tty}</span>`;
+        legendEl.appendChild(item);
+    });
+
     var cy = cytoscape({
         container: document.getElementById('cy'),
         elements: [],
@@ -41,62 +160,134 @@
                     'background-color': 'data(color)',
                     'label': 'data(label)',
                     'text-wrap': 'wrap',
+                    'text-max-width': '80px',
                     'text-valign': 'center',
                     'text-halign': 'center',
+                    'font-size': '8px',
+                    'width': '50px',
+                    'height': '50px',
+                    'color': '#fff',
+                    'text-outline-width': 1,
+                    'text-outline-color': 'data(color)',
+                    'z-index': 1
+                }
+            },
+            {
+                selector: 'node[is_anchor]',
+                style: {
+                    'width': '70px',
+                    'height': '70px',
                     'font-size': '10px',
-                    'width': '60px',
-                    'height': '60px',
-                    'color': '#333'
+                    'font-weight': 'bold',
+                    'border-width': 3,
+                    'border-color': '#000',
+                    'z-index': 10
                 }
             },
             {
                 selector: 'node[tty]',
                 style: {
                     'background-color': function (node) {
-                        var tty = node.data('tty');
-                        if (node.data('color')) return node.data('color');
-                        var colors = {
-                            'SCD': '#6fb1fc',
-                            'SCDC': '#eda1ed',
-                            'IN': '#86ecad',
-                            'PIN': '#f5d63d',
-                            'BN': '#f5a352'
-                        };
-                        return colors[tty] || '#ccc';
+                        return COLORS[node.data('tty')] || COLORS.DEFAULT;
+                    },
+                    'text-outline-color': function (node) {
+                        return COLORS[node.data('tty')] || COLORS.DEFAULT;
                     }
                 }
             },
             {
                 selector: 'edge',
                 style: {
-                    'width': 2,
-                    'line-color': '#ccc',
-                    'target-arrow-color': '#ccc',
+                    'width': 1.5,
+                    'line-color': '#cbd5e1',
+                    'target-arrow-color': '#cbd5e1',
                     'target-arrow-shape': 'triangle',
                     'curve-style': 'bezier',
                     'label': 'data(label)',
-                    'font-size': '8px',
+                    'font-size': '7px',
                     'text-rotation': 'autorotate',
-                    'text-margin-y': -10
+                    'text-margin-y': -8,
+                    'opacity': 0.8
+                }
+            },
+            {
+                selector: 'node:selected',
+                style: {
+                    'border-width': 4,
+                    'border-color': '#333',
+                    'border-opacity': 0.5
                 }
             }
-        ],
-        layout: {
-            name: 'cose',
-            animate: true
-        }
+        ]
     });
 
     const graphData = JSON.parse(document.getElementById('graph-data').textContent);
     cy.add(graphData);
-    cy.layout({name: 'cose'}).run();
+
+    function runLayout(name) {
+        let options = {
+            name: name,
+            animate: true,
+            animationDuration: 500
+        };
+
+        if (name === 'dagre') {
+            options.rankDir = 'LR';
+            options.ranker = 'network-simplex';
+            options.nodeSep = 30;
+            options.rankSep = 100;
+        } else if (name === 'cose') {
+            options.nodeOverlap = 20;
+            options.componentSpacing = 40;
+            options.refresh = 20;
+            options.fit = true;
+            options.padding = 30;
+            options.nodeRepulsion = function( node ){ return 2048; };
+        }
+
+        cy.layout(options).run();
+    }
+
+    // Default layout: hierarchical for complex graphs
+    runLayout(graphData.nodes.length > 15 ? 'dagre' : 'cose');
 
     cy.on('tap', 'node', function (evt) {
-        var node = evt.target;
-        if (node.id() !== '{{ concept.rxcui }}') {
-            window.location.href = '{% url "rxocrpl:concept_graph" "000000" %}'.replace('000000', node.id());
+        const node = evt.target;
+        const data = node.data();
+        const exploreUrl = "{% url 'rxocrpl:concept_graph' '000000' %}".replace('000000', data.id);
+        
+        const content = document.getElementById('details-content');
+        content.innerHTML = `
+            <div class="node-info-card">
+                <span class="tty-badge">${data.tty}</span>
+                <h4>${data.label}</h4>
+                <p class="mono-sm" style="margin: 0.5rem 0;">RXCUI: ${data.id}</p>
+                <p class="body-sm">${TTY_LABELS[data.tty] || 'Concept'}</p>
+                <div style="margin-top: 1rem;">
+                    <a href="${exploreUrl}" class="button button-secondary" style="font-size: 11px; padding: 4px 8px;">Explore this Graph</a>
+                </div>
+            </div>
+        `;
+
+        // Highlight connected edges
+        cy.elements().removeClass('highlighted');
+        node.connectedEdges().addClass('highlighted');
+    });
+
+    cy.on('tap', function(event) {
+        if (event.target === cy) {
+            cy.elements().removeClass('highlighted');
+            document.getElementById('details-content').innerHTML = '<p class="caption">Click a node to see more information.</p>';
         }
     });
+
+    // Add highlighting style
+    cy.style().selector('edge.highlighted').style({
+        'line-color': '#3b82f6',
+        'target-arrow-color': '#3b82f6',
+        'width': 3,
+        'opacity': 1
+    }).update();
+
 </script>
-</body>
-</html>
+{% endblock %}
