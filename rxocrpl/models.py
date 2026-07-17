@@ -177,7 +177,7 @@ class Product(ComputedFieldsModel):
     """FDA drug product details."""
 
     product_ndc = models.CharField(max_length=20, primary_key=True)
-    generic_name = models.CharField(max_length=200)
+    generic_name = models.CharField(max_length=400)
     brand_name = models.CharField(max_length=100, null=True, blank=True)
     labeler = models.ForeignKey(
         Labeler, on_delete=models.SET_NULL, null=True, blank=True
@@ -326,9 +326,9 @@ class ListedIngredient(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name="ingredients", editable=False
     )
-    name = models.CharField(max_length=100)
-    strength = models.CharField(max_length=50)
-    unit = models.CharField(max_length=20)
+    name = models.CharField(max_length=400)
+    strength = models.CharField(max_length=300)
+    unit = models.CharField(max_length=300)
 
     class Meta:
         ordering = ["name"]
@@ -344,7 +344,7 @@ class PackagedProduct(ComputedFieldsModel):
         Product, on_delete=models.CASCADE, related_name="packaged_products"
     )
     package_code = models.CharField(max_length=2)
-    description = models.CharField(max_length=255)
+    description = models.CharField(max_length=400)
     active = models.BooleanField(default=True)
     package_ndc = ComputedField(
         models.CharField(max_length=13, unique=True),
