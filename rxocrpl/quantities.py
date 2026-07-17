@@ -81,6 +81,7 @@ Combining activities with different standards is an error, even though they shar
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Union
@@ -224,7 +225,7 @@ define("units", ACTIVITY, 1.0, aliases=("u", "U", "unit"))
 # w/w, v/v); it is registered as a bare ratio and must NOT be silently
 # coerced to a concentration without knowing which percent is meant.
 define("%", DIMENSIONLESS, 0.01)
-define("", DIMENSIONLESS, 1.0)
+define("", DIMENSIONLESS, 1.0, aliases=("1",))
 
 
 def _resolve(symbol: str) -> Unit:
@@ -372,15 +373,31 @@ class Quantity:
       def __ge__(self, other):
             return not self < other
 
+      def __round__(self, ndigits: int = 0) -> Quantity:
+            return Quantity(round(self.value, ndigits), self.unit)
+
       def __hash__(self):
             return hash((round(self.to_base(), 12), self.dimension, self.standard))
 
       def __str__(self) -> str:
             return f"{self.value} {self.unit}".rstrip()
 
-      def __init__(self, value: float | int, unit: str):
-            object.__setattr__(self, "value", value)
-            object.__setattr__(self, "unit", unit)
+      def __init__(self, value: float | int | str, unit: str | Unit = None):
+            if isinstance(value, str):
+                  # Parse a string like "5.5mg" or "7000 mcg" or "2 mg / mL" into a Quantity.
+                  mag_regex = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*(.+)\s*$")
+                  match = mag_regex.match(value)
+                  if not match:
+                        raise ValueError(f"Invalid quantity string: {value!r}")
+                  mag, unit = match.groups()
+                  mag = float(mag)
+                  unit = _resolve(unit.strip()).symbol
+            else:
+                  mag = float(value)
+                  if isinstance(unit, Unit):
+                        unit = unit.symbol
+            self.value = mag
+            self.unit = unit
 
 
 # Backwards-compatible alias for existing imports/annotations.
@@ -428,3 +445,144 @@ def percent(v): return Quantity(v, "%")
 
 
 def each(v): return Quantity(v, "each")
+
+
+if __name__ == "__main__":
+      # ── ANSI palette ──────────────────────────────────────────
+      RESET, BOLD, DIM = "\033[0m", "\033[1m", "\033[2m"
+      CYAN, GREEN, YELLOW, RED, MAGENTA, BLUE = (
+            "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[35m", "\033[34m")
+
+
+      def _hdr(title: str) -> None:
+            print(f"\n{BOLD}{MAGENTA}{'─' * 62}{RESET}")
+            print(f"{BOLD}{MAGENTA}{title}{RESET}")
+            print(f"{BOLD}{MAGENTA}{'─' * 62}{RESET}")
+
+
+      def _show(label: str, q, note: str = "") -> None:
+            dim = f"{DIM}[{q.dimension}]{RESET}" if isinstance(q, Quantity) else ""
+            tail = f"  {DIM}{note}{RESET}" if note else ""
+            print(f"  {CYAN}{label:<28}{RESET} {BOLD}{GREEN}{q}{RESET} {dim}{tail}")
+
+
+      def show_conc(conc: "Quantity", units=("mg/mL", "mcg/mL", "g/L", "mg/L", "ng/mL"),
+                    prec: int = 6) -> None:
+            print(f"{BOLD}{CYAN}CONC:{RESET} {BOLD}{conc}{RESET} {DIM}[{conc.dimension}]{RESET}")
+            w = max(map(len, units))
+            for u in units:
+                  q = conc.to(u)
+                  print(f"  -> {GREEN}{q.value:>14,.{prec}g}{RESET} {YELLOW}{u:<{w}}{RESET}")
+
+
+      def expect_error(label: str, fn) -> None:
+            try:
+                  fn()
+                  print(f"  {RED}{BOLD}NO ERROR RAISED{RESET} {DIM}({label}){RESET}")
+            except Exception as e:  # noqa: BLE001
+                  print(f"  {CYAN}{label:<28}{RESET} {RED}{type(e).__name__}{RESET}"
+                        f" {DIM}{e}{RESET}")
+
+
+      if __name__ == "__main__":
+            # ---------------------------------------------------------------- 1
+            _hdr("1. Intrinsic conversion within a dimension")
+            dose = Quantity("6500 mg")
+            _show("parsed from string", dose)
+            for u in ("mcg", "mg", "g", "kg"):
+                  _show(f"-> {u}", dose.to(u))
+
+            # ---------------------------------------------------------------- 2
+            _hdr("2. Derived concentration (MASS / VOLUME)")
+            bag = Quantity("1 L")
+            conc = dose / bag
+            show_conc(conc)
+
+            # ---------------------------------------------------------------- 3
+            _hdr("3. Vancomycin 1.5 g in a 250 mL bag")
+            vanc = g(1.5)
+            bag250 = mL(250)
+            show_conc(vanc / bag250, units=("mg/mL", "mcg/mL", "g/L"))
+
+            # ---------------------------------------------------------------- 4
+            _hdr("4. Rate arithmetic: infusion over time")
+            rate: Quantity = mL(250) / Quantity(90, "min")
+            _show("infusion rate", round(rate, 2), "volume per time")
+            _show("in mL/hr", round(rate.to("mL/hr"), 2))
+            drug_rate = vanc / Quantity(90, "min")
+            _show("drug delivery rate", round(drug_rate.to("mg/hr"), 2))
+
+            # ---------------------------------------------------------------- 5
+            _hdr("5. Volume back-calculation from a vial concentration")
+            vial = Quantity(100, "mg/mL")
+            needed = mg(375)
+            draw = needed / vial
+            _show("need", needed)
+            _show("vial strength", vial)
+            _show("volume to draw", draw.to("mL"))
+
+            # ---------------------------------------------------------------- 6
+            _hdr("6. Weight-based dosing (mg/kg)")
+            wt = kg(78.4)
+            per_kg = Quantity(4.5, "mg/kg")
+            total = per_kg * wt
+            _show("patient weight", wt)
+            _show("ordered dose", per_kg)
+            _show("total dose", total.to("mg"))
+            _show("rounded to g", total.to("g"))
+
+            # ---------------------------------------------------------------- 7
+            _hdr("7. Additive arithmetic + ordering")
+            additives = [mL(20), mL(0.5), Quantity(0.004, "L"), mL(1.2)]
+            overfill = sum(additives[1:], additives[0])
+            _show("summed additive volume", overfill)
+            _show("as L", overfill.to("L"))
+            print(f"  {CYAN}{'20 mL > 0.004 L?':<28}{RESET} "
+                  f"{BOLD}{YELLOW}{mL(20) > Quantity(0.004, 'L')}{RESET}")
+            print(f"  {CYAN}{'1000 mcg == 1 mg?':<28}{RESET} "
+                  f"{BOLD}{YELLOW}{mcg(1000) == mg(1)}{RESET}")
+            print(f"  {CYAN}{'sorted doses':<28}{RESET} "
+                  f"{BOLD}{GREEN}{[str(q) for q in sorted([g(0.5), mcg(900000), mg(250)])]}{RESET}")
+
+            # ---------------------------------------------------------------- 8
+            _hdr("8. Electrolytes: CHARGE is its own axis")
+            kcl = mEq(40)
+            _show("KCl additive", kcl)
+            _show("as Eq", kcl.to("Eq"))
+            _show("mEq per litre", (kcl / L(1)).to("mEq/L"))
+            _show("mEq per hour", (kcl / Quantity(8, "hr")).to("mEq/hr"))
+
+            # ---------------------------------------------------------------- 9
+            _hdr("9. ACTIVITY standards are not interchangeable")
+            hep = units(25_000, standard="heparin")
+            ins = units(100, standard="insulin")
+            _show("heparin", hep)
+            _show("insulin", ins)
+            _show("heparin conc", (hep / mL(250)).to("units[heparin]/mL"))
+            expect_error("heparin + insulin", lambda: hep + ins)
+
+            # ---------------------------------------------------------------- 10
+            _hdr("10. Dimensional guardrails (bridges are NOT automatic)")
+            expect_error("mg -> mmol", lambda: mg(100).to("mmol"))
+            expect_error("mmol -> mEq", lambda: mmol(20).to("mEq"))
+            expect_error("mg -> units", lambda: mg(1).to("units"))
+            expect_error("mg + mL", lambda: mg(50) + mL(50))
+            expect_error("mg/mL -> mg", lambda: Quantity(10, "mg/mL").to("mg"))
+
+            # ---------------------------------------------------------------- 11
+            _hdr("11. Counts and per-container math")
+            vials = each(6)
+            per_vial = mg(500)
+            _show("vials on hand", vials)
+            _show("strength each", per_vial)
+            _show("total drug", (per_vial * vials).to("mg·each"))
+            _show("cost-style ratio", mL(10) / vials)
+
+            # ---------------------------------------------------------------- 12
+            _hdr("12. Dimensionless algebra")
+            ratio = mg(250) / mg(1000)
+            _show("dose fraction", ratio, "cancels to 1")
+            print(f"  {CYAN}{'is_dimensionless':<28}{RESET} "
+                  f"{BOLD}{YELLOW}{ratio.dimension.is_dimensionless}{RESET}")
+            _show("reciprocal of 4 hr", 1 / Quantity(4, "hr"))
+            _show("2% (bare ratio)", percent(2), "NOT silently w/v")

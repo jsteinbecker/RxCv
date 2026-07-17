@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.db.models import F, Q
+from django.db.models import Q
 
 
 class User(AbstractUser):
@@ -98,7 +98,8 @@ class ComponentInstance(TimeStampedModel):
                                    null=True, blank=True)
       lot_number = models.CharField(max_length=64, blank=True)
       expiration = models.DateField(null=True, blank=True)
-      # Add quantity_used + unit if you need to record draw amounts.
+      volume_ml = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True,
+                                      help_text="Volume drawn from this container in mL")
 
 
 class ImageSet(TimeStampedModel):
@@ -142,13 +143,8 @@ class PipelineRun(TimeStampedModel):
       """A single reproducible segmentation run over an ImageSet."""
 
       image_set = models.ForeignKey(ImageSet, on_delete=models.CASCADE, related_name="pipeline_runs")
-      initiated_by = models.ForeignKey(
-            settings.AUTH_USER_MODEL,
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name="pipeline_runs",
-      )
+      initiated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name="pipeline_runs")
       algorithm = models.CharField(max_length=32, choices=SegmentationAlgorithmChoices.choices)
       status = models.CharField(max_length=16, choices=RunStatusChoices.choices, default=RunStatusChoices.PENDING)
       model_name = models.CharField(max_length=128, blank=True)
@@ -246,24 +242,13 @@ class OcrRoleChoices(models.IntegerChoices):
 class OcrToken(TimeStampedModel):
       token = models.TextField()
       segment = models.ForeignKey(ImageSegment, on_delete=models.CASCADE, related_name="tokens")
-      source_run = models.ForeignKey(
-            PipelineRun,
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name="ocr_tokens",
-      )
-      confidence = models.DecimalField(
-            max_digits=5,
-            decimal_places=3,
-            validators=[MinValueValidator(0), MaxValueValidator(1)],
-      )
+      source_run = models.ForeignKey(PipelineRun, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="ocr_tokens", )
+      confidence = models.DecimalField(max_digits=5, decimal_places=3,
+                                       validators=[MinValueValidator(0), MaxValueValidator(1)], )
       role = models.IntegerField(choices=OcrRoleChoices.choices, default=OcrRoleChoices.TEXT)
-      role_confidence = models.DecimalField(
-            max_digits=5,
-            decimal_places=3,
-            validators=[MinValueValidator(0), MaxValueValidator(1)],
-      )
+      role_confidence = models.DecimalField(max_digits=5, decimal_places=3,
+                                            validators=[MinValueValidator(0), MaxValueValidator(1)], )
       bbox = models.JSONField(default=dict, blank=True)
       metadata = models.JSONField(default=dict, blank=True)
 

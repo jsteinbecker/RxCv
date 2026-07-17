@@ -184,6 +184,7 @@ if __name__ == "__main__":
                   print(f"  → {target}")
             try:
                   _self_test_live(target, client=client)
+                  _self_test_offline()
             except RxNavError as exc:
                   print(f"\nLive RxNav request failed: {exc}")
                   print("Check network egress to rxnav.nlm.nih.gov, or run "

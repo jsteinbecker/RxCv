@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional, TypeVar, overload, Union, List, Dict
 
-from quantities import Quantity
+from ..quantities import Quantity
 
 
 @dataclass

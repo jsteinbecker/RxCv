@@ -67,6 +67,9 @@ class NdcRxcui(NamedTuple):
       rxcui: str
       tty: str
 
+      def __repr__(self):
+            return f"rxcui<{self.rxcui},({self.tty})>"
+
 
 @dataclass(frozen=True)
 class RxNormEnrichment:
@@ -96,6 +99,10 @@ class RxNormEnrichment:
       volume_group_key
           The :class:`VolumeGroupKey` when the NDC resolves to a quantified
           form; ``None`` otherwise.
+      labeler
+          The resolved :class:`Labeler` for the NDC's labeler segment, or
+          ``None``.  Populated independently of RxNorm resolution — an NDC with
+          no RxCUI still has a labeler.
       """
       rxcui: dict[RelatedLevel, list[NdcRxcui]] = field(default_factory=dict)
       concept_rxcui: str | None = None
@@ -103,6 +110,7 @@ class RxNormEnrichment:
       status: ConceptStatus | None = None
       scdc_group: tuple[str, ...] = ()
       volume_group_key: VolumeGroupKey | None = None
+      labeler: Labeler | None = None
 
       def to_dict(self) -> dict[str, Any]:
             """Render as the JSON-serializable schema callers previously received."""
@@ -118,6 +126,7 @@ class RxNormEnrichment:
                   "volume_group_key": (
                         str(self.volume_group_key) if self.volume_group_key else None
                   ),
+                  "labeler": self.labeler.to_dict() if self.labeler else None,
             }
 
       def get(self, key: str, default: Any = None) -> Any:
@@ -176,7 +185,7 @@ def get_all_rxcui(ndc: str) -> dict[RelatedLevel, list[NdcRxcui]]:
             return {}
       result: dict[RelatedLevel, list[NdcRxcui]] = {}
       for level in RelatedLevel:
-            items = fetch_ndc_rxcui(ndc, level)
+            items = fetch_ndc_rxcui(ndc, level.value)
             if items:
                   result[level] = [NdcRxcui(item[0], item[1]) for item in items]
       return result
@@ -294,20 +303,22 @@ def get_rxnorm_enrichment(ndc: str) -> RxNormEnrichment:
       if not ndc:
             return RxNormEnrichment()
 
+      labeler = get_labeler(ndc)
+
       rxcui_map = get_all_rxcui(ndc)
       concept_items = rxcui_map.get(RelatedLevel.CONCEPT) or []
       concept_rxcui = _select_concept_rxcui(concept_items)
 
       if not concept_rxcui:
-            return RxNormEnrichment(rxcui=rxcui_map, concept_rxcui=concept_rxcui)
+            return RxNormEnrichment(rxcui=rxcui_map, concept_rxcui=concept_rxcui, labeler=labeler)
 
       try:
             concept = get_concept(concept_rxcui)
       except RxNavError:
-            return RxNormEnrichment(rxcui=rxcui_map, concept_rxcui=concept_rxcui)
+            return RxNormEnrichment(rxcui=rxcui_map, concept_rxcui=concept_rxcui, labeler=labeler)
 
       if not concept:
-            return RxNormEnrichment(rxcui=rxcui_map, concept_rxcui=concept_rxcui)
+            return RxNormEnrichment(rxcui=rxcui_map, concept_rxcui=concept_rxcui, labeler=labeler)
 
       status: ConceptStatus | None = None
       try:
@@ -335,6 +346,7 @@ def get_rxnorm_enrichment(ndc: str) -> RxNormEnrichment:
             status=status,
             scdc_group=scdc_group,
             volume_group_key=volume_group_key,
+            labeler=labeler,
       )
 
 
@@ -347,16 +359,363 @@ def valid_ndc_format(ndc: str) -> bool:
       return bool(NDC_10_FORMAT.match(ndc) or NDC_11_FORMAT.match(ndc))
 
 
+# ---------------------------------------------------------------------------
+# Labeler resolution
+# ---------------------------------------------------------------------------
+#
+# The labeler code is the first segment of an NDC.  Resolution escalates:
+#
+#   1. ``Labelers.active.json`` — a curated local file, hit first because it is
+#      free, offline, and carries product counts that openFDA does not.
+#   2. openFDA ``/drug/ndc.json`` — the network fallback, queried only when the
+#      local file misses.  Its answer is memoized in ``_OPENFDA_CACHE`` so a
+#      miss costs one request per labeler code, not one per NDC.
+#
+# A labeler code has no fixed width: it is 4, 5, or 6 digits depending on the
+# NDC's segment configuration.  ``labeler_code_candidates`` therefore yields
+# every plausible reading rather than guessing one, and lookup tries each in
+# turn.  This is why an unpadded 10-digit NDC is ambiguous and a hyphenated one
+# is not.
+
+import json
+import os
+from pathlib import Path
+
+_LABELERS_PATH = Path(
+      os.environ.get("LABELERS_JSON", Path(__file__).with_name("Labelers.active.json"))
+)
+_OPENFDA_NDC_URL = "https://api.fda.gov/drug/ndc.json"
+
+
+@dataclass(frozen=True)
+class Labeler:
+      """A resolved NDC labeler.
+
+      Attributes
+      ----------
+      code
+          The labeler segment of the NDC, as matched (zero-padding preserved).
+      name
+          Short/common name (the JSON key locally; the openFDA
+          ``labeler_name`` otherwise).
+      full_name
+          Registered corporate name, when known.
+      source
+          ``"local"`` or ``"openfda"`` — which tier answered.
+      codes
+          Every labeler code owned by this labeler.  Only populated from the
+          local file; openFDA answers for one code at a time.
+      active_rx_product_count, active_ndc_product_count, in_rxnorm
+          Curation metadata, local file only.
+      """
+
+      code: str
+      name: str
+      full_name: str | None = None
+      source: str = "local"
+      codes: tuple[str, ...] = ()
+      active_rx_product_count: int | None = None
+      active_ndc_product_count: int | None = None
+      in_rxnorm: bool | None = None
+
+      @property
+      def has_active_ndc_products(self) -> bool:
+            return bool(self.active_ndc_product_count)
+
+      def to_dict(self) -> dict[str, Any]:
+            return {
+                  "code": self.code,
+                  "name": self.name,
+                  "full_name": self.full_name,
+                  "source": self.source,
+                  "codes": list(self.codes),
+                  "active_rx_product_count": self.active_rx_product_count,
+                  "active_ndc_product_count": self.active_ndc_product_count,
+                  "in_rxnorm": self.in_rxnorm,
+            }
+
+      def __str__(self) -> str:
+            return f"{self.name} <{self.code}>"
+
+
+def labeler_code_candidates(ndc: str) -> tuple[str, ...]:
+      """Every plausible labeler segment for *ndc*, most-likely first.
+
+      Hyphenated NDCs are unambiguous — the first segment *is* the code, and it
+      is returned alone.  Bare digit strings are not: an 11-digit NDC is 5-4-2
+      by convention, but a 10-digit one may be 4-4-2, 5-3-2, or 5-4-1, so the
+      5- and 4-digit readings are both returned.  Returns ``()`` for input that
+      cannot be an NDC.
+      """
+      if not ndc:
+            return ()
+
+      if "-" in ndc:
+            head = ndc.split("-", 1)[0]
+            return (head,) if head.isdigit() else ()
+
+      digits = "".join(ch for ch in ndc if ch.isdigit())
+      if len(digits) == 11:
+            return (digits[:5],)
+      if len(digits) == 10:
+            # 5-3-2 / 5-4-1 both start with 5; 4-4-2 starts with 4.
+            return (digits[:5], digits[:4])
+      if len(digits) >= 4:
+            return (digits[:5], digits[:4]) if len(digits) >= 5 else (digits[:4],)
+      return ()
+
+
+@lru_cache(maxsize=1)
+def _load_labelers() -> dict[str, Labeler]:
+      """Index ``Labelers.active.json`` by labeler code.
+
+      The file is a list of single-key objects (``[{"Eli Lilly": {...}}, ...]``);
+      this flattens it into ``{code: Labeler}`` so lookup is O(1).  A labeler
+      owning several codes is indexed under each.  Returns ``{}`` when the file
+      is absent or unreadable — a missing curation file degrades to the openFDA
+      tier rather than raising.
+      """
+      try:
+            raw = json.loads(_LABELERS_PATH.read_text())
+      except (OSError, json.JSONDecodeError):
+            return {}
+
+      index: dict[str, Labeler] = {}
+      for entry in raw or []:
+            if not isinstance(entry, dict):
+                  continue
+            for name, meta in entry.items():
+                  meta = meta or {}
+                  codes = tuple(str(c) for c in (meta.get("codes") or []))
+                  for code in codes:
+                        index[code] = Labeler(
+                              code=code,
+                              name=name,
+                              full_name=meta.get("full_name"),
+                              source="local",
+                              codes=codes,
+                              active_rx_product_count=meta.get("active_rx_product_count"),
+                              active_ndc_product_count=meta.get("active_ndc_product_count"),
+                              in_rxnorm=meta.get("in_rxnorm"),
+                        )
+      return index
+
+
+@lru_cache(maxsize=512)
+def fetch_openfda_labeler(code: str) -> Labeler | None:
+      """Resolve a labeler *code* via openFDA, or ``None`` if unknown.
+
+      Queries ``product_ndc`` on the code prefix and reads ``labeler_name`` off
+      the first result.  A 404 from openFDA means "no such labeler" and yields
+      ``None``; any other transport failure also yields ``None`` so that a flaky
+      network degrades the enrichment rather than aborting it.
+      """
+      if not code:
+            return None
+      try:
+            res = requests.get(
+                  _OPENFDA_NDC_URL,
+                  params={"search": f'product_ndc:"{code}"*'},
+                  timeout=100,
+            )
+      except requests.RequestException:
+            return None
+
+      if res.status_code == 404:  # openFDA's "no matches"
+            return None
+      if res.status_code != 200:
+            return None
+
+      results = (res.json() or {}).get("results") or []
+      if not results:
+            return None
+
+      name = results[0].get("labeler_name")
+      if not name:
+            return None
+      return Labeler(code=code, name=name, full_name=name, source="openfda")
+
+
+@lru_cache(maxsize=512)
+def get_labeler(ndc: str) -> Labeler | None:
+      """Resolve the labeler for *ndc*, escalating local → openFDA.
+
+      Every candidate code is tried against the local index before *any*
+      network call is made, so an ambiguous 10-digit NDC cannot fall through to
+      openFDA merely because its first candidate reading missed locally.
+      Returns ``None`` when no tier resolves.
+      """
+      candidates = labeler_code_candidates(ndc)
+      if not candidates:
+            return None
+
+      local = _load_labelers()
+      for code in candidates:
+            if code in local:
+                  return local[code]
+
+      for code in candidates:
+            found = fetch_openfda_labeler(code)
+            if found:
+                  return found
+
+      for code in (ndc, ndc.replace("-", "")):
+            found = fetch_openfda_labeler(code)
+            if found:
+                  return found
+
+      return None
+
+
 if __name__ == "__main__":
-      print(get_rxcui_related("221124", "SCDC"))
-      print(get_rxcui_related("1370474", "PIN"))
-      print(get_rxcui_related("1370474", "BN"))
-      print(get_rxcui_related("1370474", "SCD"))
-      print(get_rxcui_related("1370474", "SCDC"))
+      from rxocrpl.rxnorm._ansi import (
+            BOLD, CYAN, DIM, GREEN, MAGENTA, RED, RESET, YELLOW,
+            concept, cui, error, field, hdr, listing, ok, status, tty,
+      )
 
-      print(get_rxnorm_enrichment("10019-653-64"))
+      hdr("1. allrelated — every concept in a drug's neighborhood")
+      for rxcui, term in (("221124", "SCDC"), ("1370474", "PIN"),
+                          ("1370474", "BN"), ("1370474", "SCD"),
+                          ("1370474", "SCDC")):
+            listing(f"{rxcui} → {term}", get_rxcui_related(rxcui, term))
 
-      print(valid_ndc_format("10019-653-64"))
-      print(valid_ndc_format("10019-653-64-1"))
-      print(valid_ndc_format("1001965364"))
-      print(valid_ndc_format("10019065364"))
+      hdr("2. Concept + status resolution")
+      for rxcui in ("1370474", "1791700", "221124"):
+            c = get_concept(rxcui)
+            field(rxcui, concept(c))
+            field("", status(get_concept_status(rxcui)), pad=22)
+            if c:
+                  ok(c.is_quantified, f"is_quantified = {c.is_quantified}")
+
+      hdr("3. Volume-variant grouping: base → children")
+      base = "1791701"
+      variants = get_quantified_forms(base)
+      listing(f"quantified forms of {base}", variants)
+      ok(bool(variants), "historystatus exposes the base → children direction")
+
+      hdr("4. …but children → base is the hard direction")
+      child = "1791700"
+      base_concept = get_unquantified_form(child)
+      field("direct rela", f"{DIM}(SUPPRESS=\"E\" — expect nothing){RESET}")
+      field("name fallback", concept(base_concept))
+      ok(base_concept is not None,
+         "recovered via name-strip + allsrc=1" if base_concept
+         else f"{RED}both strategies failed → fall back to SCDC{RESET}")
+
+      hdr("5. SCDC group key — the suppression-proof proxy")
+      for rxcui in ("1791700", "1791702"):
+            key = get_scdc_group_key(rxcui)
+            field(rxcui, f"{YELLOW}{sorted(key)}{RESET}")
+      a, b = get_scdc_group_key("1791700"), get_scdc_group_key("1791702")
+      ok(a == b and bool(a),
+         "two volume variants share one SCDC key" if a == b
+         else "keys diverge — not the same drug")
+      print(f"  {DIM}NB: SCDC encodes ingredient+strength but NOT dose form.{RESET}")
+
+      hdr("6. get_volume_group_key — best available handle")
+      for rxcui in ("1791700", "1370474"):
+            k = get_volume_group_key(rxcui)
+            kind_color = GREEN if k.kind == "scd" else YELLOW
+            field(rxcui, f"{BOLD}{kind_color}{k.kind}{RESET} {DIM}{k}{RESET}",
+                  "clean base" if k.kind == "scd" else "SCDC fallback")
+
+      hdr("7. Full enrichment for an NDC")
+      enr = get_rxnorm_enrichment("10019-653-64")
+      field("concept", concept(enr.concept))
+      field("concept_rxcui", cui(enr.concept_rxcui))
+      field("status", status(enr.status))
+      field("scdc_group", f"{YELLOW}{list(enr.scdc_group)}{RESET}")
+      field("volume_group_key", f"{DIM}{enr.volume_group_key}{RESET}")
+      print()
+      for level, items in enr.rxcui.items():
+            listing(level.value, items,
+                    render=lambda i: f"{cui(i.rxcui)} [{tty(i.tty)}]")
+
+      hdr("8. TTY preference in _select_concept_rxcui")
+      cases = [
+            ("SCSD wins over SCD", [NdcRxcui("111", "SCD"), NdcRxcui("222", "SCSD")], "222"),
+            ("SCD when no SCSD", [NdcRxcui("111", "SBD"), NdcRxcui("222", "SCD")], "222"),
+            ("first when neither", [NdcRxcui("111", "BPCK"), NdcRxcui("222", "GPCK")], "111"),
+            ("None when empty", [], None),
+      ]
+      for label, items, expected in cases:
+            got = _select_concept_rxcui(items)
+            ok(got == expected, f"{label:<22} → {cui(got)}")
+
+      hdr("9. NDC format validation")
+      for ndc, expect in (("10019-653-64", True), ("10019-653-64-1", False),
+                          ("1001965364", True), ("10019065364", True),
+                          ("0002-7510-01", True), ("abc-def-gh", False)):
+            got = valid_ndc_format(ndc)
+            mark = f"{GREEN}valid{RESET}" if got else f"{RED}invalid{RESET}"
+            ok(got == expect, f"{YELLOW}{ndc:<16}{RESET} {mark}")
+
+      hdr("10. Empty-input short circuits")
+      ok(get_all_rxcui("") == {}, "get_all_rxcui('') → {}")
+      empty = get_rxnorm_enrichment("")
+      ok(empty.concept is None and not empty.rxcui,
+         "get_rxnorm_enrichment('') → empty RxNormEnrichment")
+      field("to_dict()", f"{DIM}{empty.to_dict()}{RESET}")
+
+      hdr("11. Enrichment cache")
+      info = get_rxnorm_enrichment.cache_info()
+      print(f"  {CYAN}{'get_rxnorm_enrichment':<24}{RESET} "
+            f"{GREEN}{info.hits} hits{RESET} {DIM}/{RESET} "
+            f"{YELLOW}{info.misses} misses{RESET} "
+            f"{DIM}(size {info.currsize}/{info.maxsize}){RESET}")
+
+      hdr("12. Labeler lookup — local index, then openFDA")
+      _ansi_src = {"local": GREEN, "openfda": YELLOW}
+
+
+      def show_labeler(ndc: str) -> None:
+            lab = get_labeler(ndc)
+            if not lab:
+                  field(ndc, f"{RED}unresolved{RESET}",
+                        f"candidates={list(labeler_code_candidates(ndc))}")
+                  return
+            color = _ansi_src.get(lab.source, DIM)
+            field(ndc, f"{BOLD}{color}{lab.source:<7}{RESET} {cui(lab.code)} {lab.name}")
+            if lab.full_name and lab.full_name != lab.name:
+                  field("", f"{DIM}{lab.full_name}{RESET}")
+            if lab.source == "local":
+                  field("", f"{DIM}rx={lab.active_rx_product_count} "
+                            f"ndc={lab.active_ndc_product_count} "
+                            f"in_rxnorm={lab.in_rxnorm} "
+                            f"codes={list(lab.codes)}{RESET}")
+
+
+      print(f"  {DIM}local index: {len(_load_labelers())} codes "
+            f"from {_LABELERS_PATH.name}{RESET}\n")
+      for ndc in ("0002-7510-01", "10019-653-64", "00002751001",
+                  "99999-999-99", "not-an-ndc"):
+            show_labeler(ndc)
+
+      hdr("13. Labeler code candidates — where ambiguity comes from")
+      for ndc, note in (
+                  ("0002-7510-01", "hyphenated → unambiguous"),
+                  ("00002751001", "11 digits → 5-4-2 by convention"),
+                  ("1001965364", "10 digits → 4-4-2 or 5-3-2/5-4-1"),
+                  ("", "empty → no candidates"),
+      ):
+            field(ndc or "(empty)",
+                  f"{YELLOW}{list(labeler_code_candidates(ndc))}{RESET}", note)
+
+      hdr("14. Labeler rides along in the enrichment record")
+      enr = get_rxnorm_enrichment("0002-7510-01")
+      field("labeler", f"{GREEN}{enr.labeler}{RESET}" if enr.labeler
+      else f"{DIM}None{RESET}")
+      field("concept", concept(enr.concept))
+      print(f"\n  {DIM}An NDC RxNorm cannot resolve still keeps its labeler:{RESET}")
+      orphan = get_rxnorm_enrichment("0002-9999-99")
+      field("concept", concept(orphan.concept))
+      field("labeler", f"{GREEN}{orphan.labeler}{RESET}" if orphan.labeler
+      else f"{DIM}None{RESET}")
+      ok(orphan.labeler is not None and orphan.concept is None,
+         "labeler resolves independently of RxNorm")
+
+      hdr("15. Labeler Lookup from NDC")
+      for ndc in ("65145-0129-01", "65145-129-25"):
+            enr = get_rxnorm_enrichment(ndc)
+            field(ndc, f"{GREEN}{enr.labeler}{RESET}" if enr.labeler
+            else f"{DIM}None{RESET}")

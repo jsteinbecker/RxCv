@@ -1,11 +1,24 @@
-from rxocrpl.rxgraph.traversal import clinical_drugs
 from typing import Optional
 from django.db import transaction
 from rxocrpl.models import RxNormConcept, RxNormConceptRelation, Product
+from rxocrpl.rxgraph.traversal import clinical_drugs, dose_form_group
 from rxocrpl.rxnorm.enrichment import get_rxnorm_enrichment
 from rxocrpl.rxgraph.pipeline import materialize_concept
 from rxocrpl.rxnorm.client import fetch_ndcs_by_rxcui
-from rxocrpl.rxgraph.traversal import dose_form_group
+
+NDC_PIPELINE_BASE_URL = "https://mor.nlm.nih.gov/RxMix/#?q="
+DECODED_URL_QUERY = """rxnorm.findRxcuiByString
+(allsrc:"1",
+search:"2"): idGroup.rxnormId
+rxnorm.getRelatedByType
+(expand:"psn",
+tty:" SCDF SBDF SCDFP SBDFP SCDG SBDG SCDGP"): relatedGroup.conceptGroup.conceptProperties.rxcui
+rxnorm.getRelatedByType
+(expand:"",
+tty:" SCD GPCK"): relatedGroup.conceptGroup.conceptProperties.rxcui
+rxnorm.getNDCs
+(): ndcGroup.ndcList.ndc
+"""
 
 
 def materialize_product(rxcui: str, ndc: Optional[str] = None) -> Product:
@@ -69,3 +82,9 @@ def materialize_product(rxcui: str, ndc: Optional[str] = None) -> Product:
             )
 
       return product
+
+
+if __name__ == "__main__":
+      rxcui_examples = ["161", "313782", "1156291"]  # Example RXCUIs for testing
+      products = [materialize_product(rxcui_example) for rxcui_example in rxcui_examples]
+      print(f"Materialized Products: {[product.generic_name for product in products]}")

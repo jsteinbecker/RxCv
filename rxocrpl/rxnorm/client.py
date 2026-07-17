@@ -155,12 +155,74 @@ def fetch_rxcui_by_name(name: str, allsrc: bool = True, search: int = 2) -> str 
 
 
 if __name__ == "__main__":
-      print(fetch_rxcui_by_name("dalbavancin"))
-      print(fetch_rxcui_by_name("ampicillin"))
-      print(fetch_rxcui_by_name("hydromorphone"))
-      print(fetch_rxcui_by_name("labetalol"))
+      from rxocrpl.rxnorm._ansi import (
+            BOLD, CYAN, DIM, GREEN, RESET, YELLOW,
+            concept, cui, error, field, hdr, listing, ok, status, tty,
+      )
 
-      print(fetch_related_by_tty("6918", "pin"))
-      print(fetch_related_by_tty("6918", "scd"))
+      hdr("1. Name → RxCUI resolution (allsrc=1)")
+      for drug in ("dalbavancin", "ampicillin", "hydromorphone", "labetalol"):
+            field(drug, cui(fetch_rxcui_by_name(drug)))
 
-      print(fetch_rxcui_name("221124"))
+      hdr("2. RxCUI → name")
+      for rxcui in ("221124", "6918", "1370474"):
+            name = fetch_rxcui_name(rxcui)
+            field(rxcui, f"{GREEN}{name}{RESET}" if name else f"{DIM}not found{RESET}")
+
+      hdr("3. Related concepts by TTY (active-scoped)")
+      for term in ("PIN", "SCD", "SCDC", "BN"):
+            listing(f"6918 → {term}", fetch_related_by_tty("6918", term))
+
+      hdr("4. historystatus — current + historical scope")
+      for rxcui in ("1370474", "1791700"):
+            st = fetch_history_status(rxcui)
+            mc = st.get("minConcept") or {}
+            print(f"  {BOLD}{YELLOW}{rxcui}{RESET} {DIM}{mc.get('name', '?')}{RESET}")
+            field("status", status(st.get("status")), pad=18)
+            field("tty", tty(mc.get("tty")), pad=18)
+            quantified = st.get("quantifiedConcept") or []
+            field("quantifiedConcept", f"{len(quantified)} variant(s)",
+                  "base → children only" if quantified else "not a base", pad=18)
+            for q in quantified[:5]:
+                  print(f"      {DIM}·{RESET} {cui(q.get('rxcui'))} {q.get('name')}")
+
+      hdr("5. The SUPPRESS=\"E\" asymmetry, demonstrated")
+      child = "1791700"
+      print(f"  {DIM}Querying a quantified child for its unquantified base:{RESET}")
+      listing("quantified_form_of", fetch_related_by_rela(child, "quantified_form_of"))
+      ok(not fetch_related_by_rela(child, "quantified_form_of"),
+         f"{DIM}empty as expected — the base is SUPPRESS=\"E\"{RESET}")
+
+      hdr("6. NDC → (rxcui, tty) at each relation scope")
+      for relation in ("concept", "drug", "product"):
+            pairs = fetch_ndc_rxcui("10019-653-64", relation)
+            listing(relation, pairs,
+                    render=lambda p: f"{cui(p[0])} [{tty(p[1])}]")
+
+      hdr("7. RxCUI → all NDCs")
+      ndcs = fetch_ndcs_by_rxcui("1791700")
+      field("1791700", f"{GREEN}{len(ndcs)}{RESET} NDCs")
+      for n in ndcs[:8]:
+            print(f"    {DIM}·{RESET} {YELLOW}{n}{RESET}")
+      if len(ndcs) > 8:
+            print(f"    {DIM}… {len(ndcs) - 8} more{RESET}")
+
+      hdr("8. Error / not-found handling")
+      field("unknown rxcui", f"{DIM}{fetch_rxcui_name('99999999')}{RESET}", "404 → None")
+      field("unknown name", f"{DIM}{fetch_rxcui_by_name('notadrug')}{RESET}", "→ None")
+      listing("empty relatedGroup", fetch_related_by_tty("99999999", "SCD"))
+      try:
+            _get("nonsense/endpoint.json")
+      except RxNavError as e:
+            error(e, "bad endpoint")
+
+      hdr("9. lru_cache hit rates")
+      for fn in (fetch_rxcui_name, fetch_related_by_tty, fetch_ndc_rxcui,
+                 fetch_history_status, fetch_rxcui_by_name):
+            info = fn.cache_info()
+            rate = info.hits / (info.hits + info.misses) if (info.hits + info.misses) else 0
+            bar = "█" * int(rate * 20)
+            print(f"  {CYAN}{fn.__name__:<24}{RESET} "
+                  f"{GREEN}{info.hits:>3} hits{RESET} {DIM}/{RESET} "
+                  f"{YELLOW}{info.misses:>3} misses{RESET} "
+                  f"{GREEN}{bar:<20}{RESET} {DIM}{rate:.0%}{RESET}")

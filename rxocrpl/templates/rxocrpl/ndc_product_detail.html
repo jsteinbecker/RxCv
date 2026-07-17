@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.generic_name }} · RxCv{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .breadcrumb {
+            font-size: 0.85rem;
+            color: var(--fg-muted);
+            margin-bottom: 1rem;
+        }
+
+        .breadcrumb a {
+            color: var(--brand);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .ndc-badge {
+            display: inline-block;
+            font-family: var(--font-mono), monospace;
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            background: var(--bg-app);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            color: var(--fg-secondary);
+        }
+
+        .meta-row {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .meta-row span {
+            color: var(--fg-muted);
+        }
+
+        .meta-row strong {
+            color: var(--fg-primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        th {
+            background: var(--bg-app);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--fg-secondary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .rxcui-code {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+        }
+
+        .tty-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: var(--bg-app);
+            border: 1px solid var(--border-default);
+            color: var(--fg-secondary);
+        }
+
+        .package {
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+        }
+
+        .package-header {
+            margin-bottom: 0.5rem;
+        }
+
+        .package-tree {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .package-tree li {
+            padding: 4px 0 4px calc(var(--depth) * 1.5rem);
+            position: relative;
+            font-size: 0.9rem;
+        }
+
+        .package-tree li[style*="--depth: 0"] {
+            padding-left: 0;
+        }
+
+        .package-tree li::before {
+            content: "";
+            position: absolute;
+            left: calc(var(--depth) * 1.5rem - 0.9rem);
+            top: 0.9rem;
+            width: 0.7rem;
+            border-top: 1px solid var(--border-default);
+        }
+
+        .package-tree li[style*="--depth: 0"]::before {
+            display: none;
+        }
+
+        .pkg-qty {
+            font-weight: 600;
+            color: var(--fg-primary);
+        }
+
+        .pkg-in {
+            color: var(--fg-muted);
+            font-size: 0.8rem;
+            margin: 0 0.25rem;
+        }
+
+        .pkg-container {
+            color: var(--fg-secondary);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="breadcrumb">
+        <a href="{% url 'rxocrpl:index' %}">RxOCR Pipeline</a> &rsaquo;
+        <a href="{% url 'rxocrpl:ndc_product_list' %}">NDC Products</a> &rsaquo;
+        {{ product.generic_name }}
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <h1 style="margin: 0;">{{ product.generic_name }}</h1>
+                {% if product.brand_name %}
+                    <p style="margin: 0.25rem 0; color: var(--fg-secondary); font-size: 1rem;">{{ product.brand_name }}</p>
+                {% endif %}
+                <div class="meta-row">
+                    <span>NDC <strong><span class="ndc-badge">{{ product.product_ndc }}</span></strong></span>
+                    <span>Form <strong>{{ product.dosage_form|default:"—" }}</strong></span>
+                    <span>Route <strong>{{ product.route|default:"—" }}</strong></span>
+                    <span>Labeler
+                        {% if product.labeler_id %}
+                            <a href="{% url 'rxocrpl:labeler_detail' product.labeler_id %}"><strong>{{ product.labeler_name }}</strong></a>
+                        {% else %}
+                            <strong>{{ product.labeler_name|default:"—" }}</strong>
+                        {% endif %}
+                    </span>
+                    <span><a href="{% url 'admin:rxocrpl_product_change' product.pk %}">Admin Page</a></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Ingredients</h2>
+            {% if ingredients %}
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Strength</th>
+                        <th>Unit</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for ingredient in ingredients %}
+                        <tr>
+                            <td>{{ ingredient.name }}</td>
+                            <td>{{ ingredient.strength|default:"—" }}</td>
+                            <td>{{ ingredient.unit|default:"—" }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="color: var(--fg-muted);">No ingredients listed.</p>
+            {% endif %}
+        </div>
+
+        <div class="card" style="grid-column: span 2;">
+            <h2>Packages</h2>
+            {% if packages %}
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Package</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for pkg in packages %}
+                        <tr class="package">
+                            <td>
+                                <div class="package-header">
+                                    <span class="dosage-badge">Package {{ pkg.package_code }}</span>
+                                </div>
+                                <ul class="package-tree">
+                                    {% for level in pkg.parse_package_description %}
+                                        <li style="--depth: {{ forloop.counter0 }}">
+                                            <span class="pkg-qty">{{ level.qty }} {{ level.unit }}</span>
+                                            <span class="pkg-in">in</span>
+                                            <span class="pkg-container">{{ level.count }} {{ level.container }}</span>
+                                            {% if level.ndc %}<span class="ndc-code">{{ level.ndc }}</span>{% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="color: var(--fg-muted);">No packages listed.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if possible_concepts %}
+        <div class="card">
+            <h2>Related RxNorm Concepts</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>RXCUI</th>
+                    <th>Name</th>
+                    <th>TTY</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for concept in possible_concepts %}
+                    <tr>
+                        <td><span class="rxcui-code">{{ concept.rxcui }}</span></td>
+                        <td>{{ concept.name }}</td>
+                        <td><span class="tty-badge">{{ concept.tty }}</span></td>
+                        <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View
+                            Graph</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endblock %}

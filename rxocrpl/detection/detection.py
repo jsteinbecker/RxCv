@@ -57,8 +57,10 @@ def _no_grad_decorator(func):
       isn't installed, in which case the wrapped method also can't run — but
       having the decorator be a no-op lets the module import."""
       if _TORCH_AVAILABLE:
+            assert torch is not None
             return torch.no_grad()(func)
       return func
+
 
 # Default text prompt for Grounding DINO. Period-separated phrases is the
 # format the model expects — each phrase becomes a candidate class.
@@ -118,6 +120,11 @@ class Detector:
                         "pip install git+https://github.com/facebookresearch/sam2.git"
                   )
 
+            assert torch is not None
+            assert AutoProcessor is not None
+            assert AutoModelForZeroShotObjectDetection is not None
+            assert SAM2ImagePredictor is not None
+
             self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
             # Grounding DINO — open-vocab detector. Outputs boxes from text prompt.
@@ -134,7 +141,7 @@ class Detector:
       def detect(
                 self,
                 image_path: str | Path,
-                prompt: str = DEFAULT_PROMPT,
+                detector_prompt: str = DEFAULT_PROMPT,
                 box_threshold: float = BOX_THRESHOLD,
                 text_threshold: float = TEXT_THRESHOLD,
                 min_mask_area: int = MIN_MASK_AREA,
@@ -150,7 +157,7 @@ class Detector:
 
             # --- Grounding DINO: text prompt -> bounding boxes -----------------
             inputs = self.gdino_processor(
-                  images=image, text=prompt, return_tensors="pt"
+                  images=image, text=detector_prompt, return_tensors="pt"
             ).to(self.device)
             outputs = self.gdino_model(**inputs)
 
@@ -233,7 +240,7 @@ def detect_image(
     """
       if detector is None:
             detector = Detector()
-      return detector.detect(image_path, prompt=prompt)
+      return detector.detect(image_path, detector_prompt=prompt)
 
 
 if __name__ == "__main__":
@@ -247,7 +254,7 @@ if __name__ == "__main__":
       prompt = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_PROMPT
 
       det = Detector()
-      results = det.detect(img_path, prompt=prompt)
+      results = det.detect(img_path, detector_prompt=prompt)
       print(f"Found {len(results)} objects in {img_path}")
       for r in results:
             print(
