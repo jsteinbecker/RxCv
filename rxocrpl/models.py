@@ -316,6 +316,11 @@ class Product(ComputedFieldsModel):
                 continue
         return "; ".join(str(s) for s in substances)
 
+    @property
+    def dailymed_url(self) -> str:
+        """Outgoing DailyMed URL for this product, for use as a detail-page href."""
+        return get_dailymed_url(self.product_ndc)
+
 
 class ListedIngredient(models.Model):
     product = models.ForeignKey(
@@ -373,11 +378,6 @@ class PackagedProduct(ComputedFieldsModel):
             d["count"] = int(d["count"])
             levels.append(d)
         return levels
-
-      @property
-      def dailymed_url(self) -> str:
-            """Outgoing DailyMed URL for this product, for use as a detail-page href."""
-            return get_dailymed_url(self.product_ndc)
 
 
 class CspOrder(models.Model):

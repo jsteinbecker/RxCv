@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 
 from .models import (
@@ -232,15 +232,29 @@ class ProductAdmin(admin.ModelAdmin):
 
     inlines = [InlineIngredient, InlinePackages]
     search_fields = ["brand_name", "generic_name", "product_ndc"]
-    actions = ["enrich_selected_products"]
+    actions = ["enrich_from_outside_sources"]
 
-    @admin.action(description="Enrich selected products from FDA/RxNorm")
-    def enrich_selected_products(self, request, queryset):
+    @admin.action(description="Enrich from Outside Sources")
+    def enrich_from_outside_sources(self, request, queryset):
+        succeeded = 0
+        failed = []
         for product in queryset:
-            sync_product_from_external_sources(product.product_ndc)
-        self.message_user(
-            request, f"Successfully enriched {queryset.count()} products."
-        )
+            try:
+                sync_product_from_external_sources(product.product_ndc)
+                succeeded += 1
+            except Exception as exc:
+                failed.append(f"{product.product_ndc} ({exc})")
+
+        if succeeded:
+            self.message_user(
+                request, f"Successfully enriched {succeeded} product(s)."
+            )
+        if failed:
+            self.message_user(
+                request,
+                f"Failed to enrich {len(failed)} product(s): {', '.join(failed)}",
+                level=messages.ERROR,
+            )
 
     def get_urls(self):
         from django.urls import path
