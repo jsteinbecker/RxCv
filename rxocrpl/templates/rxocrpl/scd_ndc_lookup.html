@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="container mt-4">
+        <h1 class="mb-4">SCD NDC Lookup</h1>
+        <form method="post" action="{% url 'scd_ndc_lookup' %}">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="ndc">Enter NDC:</label>
+                <input type="text" class="form-control" id="ndc" name="ndc" placeholder="Enter NDC" required>
+            </div>
+            <button type="submit" class="btn btn-primary mt-2">Lookup</button>
+        </form>
+        {% if result %}
+            <div class="mt-4">
+                <h2>Lookup Result</h2>
+                <pre>{{ result }}</pre>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
