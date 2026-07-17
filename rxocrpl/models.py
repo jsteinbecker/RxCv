@@ -2,6 +2,7 @@ from django.db import models
 from django.core.validators import MinValueValidator
 
 from .rxgraph.traversal import RxConceptTraversalMixin
+from .dailymed import get_dailymed_url
 
 
 class TermType(models.TextChoices):
@@ -105,6 +106,11 @@ class Product(models.Model):
 
       def __str__(self):
             return f"{self.generic_name} ({self.product_ndc})"
+
+      @property
+      def dailymed_url(self) -> str:
+            """Outgoing DailyMed URL for this product, for use as a detail-page href."""
+            return get_dailymed_url(self.product_ndc)
 
 
 class CspOrder(models.Model):
