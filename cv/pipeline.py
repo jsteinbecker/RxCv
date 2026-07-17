@@ -15,23 +15,22 @@ Manufacturer recognition is driven by the registry parsed from
 
 from __future__ import annotations
 
-import re
+import datetime as dt
 import json
-from dataclasses import dataclass, asdict, field
-from datetime import datetime
-from pathlib import Path
+import re
 from collections import defaultdict, deque
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
 
 import cv2
 import numpy as np
 import pytesseract
 from scipy.ndimage import gaussian_filter1d
 
-from mfg_lookup import get_registry, ManufacturerRegistry
 from linker import link_images
-from watershed import segment_components as ws_segment
+from mfg_lookup import get_registry, ManufacturerRegistry
 from panoptic import segment_components as po_segment
-import datetime as dt
+from watershed import segment_components as ws_segment
 
 # ============================================================
 # CONFIG

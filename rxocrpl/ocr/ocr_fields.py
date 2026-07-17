@@ -714,6 +714,7 @@ class FieldExtractor:
       ) -> None:
             if not _EASYOCR_AVAILABLE:
                   raise ImportError("EasyOCR not installed. Run: pip install easyocr")
+            assert easyocr is not None
             if use_gpu is None:
                   try:
                         import torch

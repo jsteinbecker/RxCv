@@ -201,7 +201,7 @@ def detect_image(
     """
       if detector is None:
             detector = Detector()
-      return detector.detect(image_path, prompt=prompt)
+      return detector.detect(image_path, detector_prompt=prompt)
 
 
 if __name__ == "__main__":
@@ -215,7 +215,7 @@ if __name__ == "__main__":
       prompt = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_PROMPT
 
       det = Detector()
-      results = det.detect(img_path, prompt=prompt)
+      results = det.detect(img_path, detector_prompt=prompt)
       print(f"Found {len(results)} objects in {img_path}")
       for r in results:
             print(
