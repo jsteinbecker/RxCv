@@ -1,3 +1,4 @@
+from rxocrpl.dailymed import get_dailymed_url
 import csv
 import re
 
@@ -67,7 +68,9 @@ TTY_RANK = {
 GRAPH_GROUP_THRESHOLD = 6
 
 
-def _bundle_concept_graph(nodes, edges, anchor_rxcui, group_threshold=GRAPH_GROUP_THRESHOLD):
+def _bundle_concept_graph(
+    nodes, edges, anchor_rxcui, group_threshold=GRAPH_GROUP_THRESHOLD
+):
     """Reduce a raw ego-graph (nodes/edges) to something legible to render:
 
     - parallel edges between the same node pair are merged into one edge
@@ -138,7 +141,11 @@ def _bundle_concept_graph(nodes, edges, anchor_rxcui, group_threshold=GRAPH_GROU
                 "tty": tty,
                 "members": member_info,
             }
-            src, tgt = (anchor_rxcui, group_id) if direction == "out" else (group_id, anchor_rxcui)
+            src, tgt = (
+                (anchor_rxcui, group_id)
+                if direction == "out"
+                else (group_id, anchor_rxcui)
+            )
             display_edges.append(
                 {
                     "data": {
@@ -527,6 +534,7 @@ def ndc_product_detail_view(request, ndc):
         "ingredients": ingredients,
         "confirmed_mappings": confirmed_mappings,
         "possible_concepts": possible_concepts,
+        "dailymed_url": get_dailymed_url(product.product_ndc),
     }
     return render(request, "rxocrpl/ndc_product_detail.html", context)
 

@@ -7,3 +7,4 @@ build/
 .venv/
 out/
 *.sqlite3
+.env/

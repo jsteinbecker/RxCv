@@ -20,6 +20,7 @@
       <excludeFolder url="file://$MODULE_DIR$/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/out" />
+      <excludeFolder url="file://$MODULE_DIR$/ocrpipeline/out" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.14 (RxCv)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

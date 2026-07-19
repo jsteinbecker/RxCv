@@ -6,6 +6,7 @@
   </component>
   <component name="RuffConfiguration">
     <option name="enabled" value="true" />
+    <option name="formatting" value="false" />
   </component>
   <component name="TyConfiguration">
     <option name="enabled" value="true" />

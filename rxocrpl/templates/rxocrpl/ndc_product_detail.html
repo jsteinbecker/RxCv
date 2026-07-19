@@ -156,6 +156,7 @@
                     <p style="margin: 0.25rem 0; color: var(--fg-secondary); font-size: 1rem;">{{ product.brand_name }}</p>
                 {% endif %}
                 <div class="meta-row">
+                    <a href="{{ dailymed_url }}" target="_blank" rel="noopener noreferrer">View on DailyMed</a>
                     <span>NDC <strong><span class="ndc-badge">{{ product.product_ndc }}</span></strong></span>
                     <span>Form <strong>{{ product.dosage_form|default:"—" }}</strong></span>
                     <span>Route <strong>{{ product.route|default:"—" }}</strong></span>

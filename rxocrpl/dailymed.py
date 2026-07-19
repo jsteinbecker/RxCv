@@ -100,5 +100,7 @@ def get_dailymed_url(ndc: str) -> str:
 
 
 if __name__ == "__main__":
-    print(get_dailymed_url("0002-1200"))
-    print(get_dailymed_url("0002-1200-01"))
+    print(
+        get_dailymed_url("0006-3026-01")  # KEYTRUDA 200 MG/ML INJECTION, SOLUTION
+    )
+    assert "https://dailymed.nlm.nih.gov/dailymed/getFile.cfm?setid=9333c79b-d487-4538-a9f0-71b91a02b287&type=zip"

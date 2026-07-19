@@ -53,7 +53,11 @@ class SubstanceMismatch(TypeError):
     pass
 
 
-def _base_unit_for(dim: Dimension, standard: str | None = None) -> str:
+def _base_unit_for(
+          dim: Dimension,
+          standard: str | None = None
+) -> str:
+
     if dim == ACTIVITY and standard is not None:
         sym = f"units[{standard}]"
         if sym not in _UNITS:
