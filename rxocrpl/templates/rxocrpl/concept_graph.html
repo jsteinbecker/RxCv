@@ -95,6 +95,7 @@
             <button class="button button-secondary" onclick="runLayout('dagre')">Hierarchical</button>
             <button class="button button-secondary" onclick="runLayout('cose')">Force-Directed</button>
             <button class="button button-secondary" onclick="cy.fit()">Fit</button>
+            <button class="button button-secondary" onclick="location.reload()">Collapse Groups</button>
         </div>
     </div>
 </div>
@@ -196,14 +197,32 @@
                 }
             },
             {
+                selector: 'node[?is_group]',
+                style: {
+                    'shape': 'round-rectangle',
+                    'background-color': '#94a0b0',
+                    'text-outline-color': '#94a0b0',
+                    'border-width': 2,
+                    'border-style': 'dashed',
+                    'border-color': '#475569',
+                    'width': function (node) { return 40 + Math.min(60, Math.sqrt(node.data('count')) * 12); },
+                    'height': function (node) { return 40 + Math.min(60, Math.sqrt(node.data('count')) * 12); },
+                    'font-size': '9px',
+                    'font-weight': 'bold'
+                }
+            },
+            {
                 selector: 'edge',
                 style: {
-                    'width': 1.5,
+                    'width': function (edge) { return Math.min(6, 1.5 + Math.log2((edge.data('count') || 1))); },
                     'line-color': '#cbd5e1',
                     'target-arrow-color': '#cbd5e1',
                     'target-arrow-shape': 'triangle',
                     'curve-style': 'bezier',
-                    'label': 'data(label)',
+                    'label': function (edge) {
+                        const count = edge.data('count') || 1;
+                        return count > 1 ? `${edge.data('label')} (${count})` : edge.data('label');
+                    },
                     'font-size': '7px',
                     'text-rotation': 'autorotate',
                     'text-margin-y': -8,
@@ -222,7 +241,42 @@
     });
 
     const graphData = JSON.parse(document.getElementById('graph-data').textContent);
-    cy.add(graphData);
+    const groupsMeta = graphData.groups || {};
+    cy.add({ nodes: graphData.nodes, edges: graphData.edges });
+
+    function expandGroup(groupNode) {
+        const groupId = groupNode.data('id');
+        const meta = groupsMeta[groupId];
+        if (!meta) return;
+
+        const anchorId = "{{ concept.rxcui }}";
+        const newEles = [];
+        meta.members.forEach(member => {
+            if (cy.getElementById(member.id).empty()) {
+                newEles.push({
+                    data: {
+                        id: member.id,
+                        label: member.label,
+                        tty: member.tty
+                    }
+                });
+            }
+            const source = meta.direction === 'out' ? anchorId : member.id;
+            const target = meta.direction === 'out' ? member.id : anchorId;
+            newEles.push({
+                data: {
+                    id: `expanded__${groupId}__${member.id}`,
+                    source: source,
+                    target: target,
+                    label: meta.rela
+                }
+            });
+        });
+
+        cy.remove(groupNode);
+        cy.add(newEles);
+        runLayout(cy.nodes().length > 15 ? 'dagre' : 'cose');
+    }
 
     function runLayout(name) {
         let options = {
@@ -254,8 +308,14 @@
     cy.on('tap', 'node', function (evt) {
         const node = evt.target;
         const data = node.data();
+
+        if (data.is_group) {
+            expandGroup(node);
+            return;
+        }
+
         const exploreUrl = "{% url 'rxocrpl:concept_graph' '000000' %}".replace('000000', data.id);
-        
+
         const content = document.getElementById('details-content');
         content.innerHTML = `
             <div class="node-info-card">

@@ -61,6 +61,130 @@ TTY_RANK = {
     "BN": 4,
 }
 
+# Minimum number of same-rela, same-TTY leaf neighbors (i.e. nodes with no
+# other connections in this ego graph) before they're collapsed into a single
+# expandable group node instead of being drawn individually.
+GRAPH_GROUP_THRESHOLD = 6
+
+
+def _bundle_concept_graph(nodes, edges, anchor_rxcui, group_threshold=GRAPH_GROUP_THRESHOLD):
+    """Reduce a raw ego-graph (nodes/edges) to something legible to render:
+
+    - parallel edges between the same node pair are merged into one edge
+      (edge bundling), labeled with a count when more than one rela applies.
+    - leaf neighbors (only connected to the anchor) that share the same
+      direction/rela/tty are collapsed into a single group node the client
+      can expand on demand (concept consolidation).
+    """
+    node_by_id = {n["data"]["id"]: n for n in nodes}
+
+    degree = {}
+    for e in edges:
+        s, t = e["data"]["source"], e["data"]["target"]
+        degree[s] = degree.get(s, 0) + 1
+        degree[t] = degree.get(t, 0) + 1
+
+    grouped_keys = {}
+    direct_edges = []
+
+    for e in edges:
+        data = e["data"]
+        s, t = data["source"], data["target"]
+        if s == anchor_rxcui:
+            other, direction = t, "out"
+        elif t == anchor_rxcui:
+            other, direction = s, "in"
+        else:
+            other, direction = None, None
+
+        if other is not None and degree.get(other) == 1:
+            tty = node_by_id[other]["data"].get("tty")
+            key = (direction, data["label"], tty)
+            grouped_keys.setdefault(key, []).append((other, data))
+        else:
+            direct_edges.append(data)
+
+    display_node_ids = {anchor_rxcui}
+    display_nodes = [node_by_id[anchor_rxcui]]
+    display_edges = []
+    groups_meta = {}
+
+    for (direction, rela, tty), members in grouped_keys.items():
+        if len(members) >= group_threshold:
+            group_id = f"group__{direction}__{rela}__{tty or 'NA'}"
+            member_info = [
+                {
+                    "id": nid,
+                    "label": node_by_id[nid]["data"]["label"],
+                    "tty": node_by_id[nid]["data"].get("tty"),
+                }
+                for nid, _ in members
+            ]
+            display_nodes.append(
+                {
+                    "data": {
+                        "id": group_id,
+                        "label": f"+{len(members)} {tty or 'concepts'}",
+                        "tty": tty,
+                        "is_group": True,
+                        "count": len(members),
+                        "rela": rela,
+                    }
+                }
+            )
+            groups_meta[group_id] = {
+                "rela": rela,
+                "direction": direction,
+                "tty": tty,
+                "members": member_info,
+            }
+            src, tgt = (anchor_rxcui, group_id) if direction == "out" else (group_id, anchor_rxcui)
+            display_edges.append(
+                {
+                    "data": {
+                        "id": f"ge__{group_id}",
+                        "source": src,
+                        "target": tgt,
+                        "label": rela,
+                        "count": len(members),
+                    }
+                }
+            )
+        else:
+            for nid, edge_data in members:
+                if nid not in display_node_ids:
+                    display_nodes.append(node_by_id[nid])
+                    display_node_ids.add(nid)
+                direct_edges.append(edge_data)
+
+    merged = {}
+    for data in direct_edges:
+        pair = (data["source"], data["target"])
+        bucket = merged.setdefault(pair, {"relas": [], "ids": []})
+        bucket["relas"].append(data["label"])
+        bucket["ids"].append(data.get("id"))
+        for nid in pair:
+            if nid not in display_node_ids and nid in node_by_id:
+                display_nodes.append(node_by_id[nid])
+                display_node_ids.add(nid)
+
+    for (s, t), bucket in merged.items():
+        relas = bucket["relas"]
+        display_edges.append(
+            {
+                "data": {
+                    "id": f"e__{s}__{t}",
+                    "source": s,
+                    "target": t,
+                    "label": relas[0] if len(relas) == 1 else f"{len(relas)} relations",
+                    "rela_list": relas,
+                    "count": len(relas),
+                }
+            }
+        )
+
+    return display_nodes, display_edges, groups_meta
+
 
 def _graph_product_candidate_terms(concepts):
     useful_ttys = {"IN", "PIN", "BN"}
@@ -286,16 +410,27 @@ def concept_graph_view(request, rxcui):
         if len(possible_product_links) >= 30:
             break
 
+    display_nodes, display_edges, groups_meta = _bundle_concept_graph(
+        nodes, edges, concept.rxcui
+    )
+
     graph_summary = {
         "node_count": len(nodes),
         "edge_count": len(edges),
+        "displayed_node_count": len(display_nodes),
+        "displayed_edge_count": len(display_edges),
+        "group_count": len(groups_meta),
         "confirmed_product_count": len(confirmed_product_links),
         "possible_product_count": len(possible_product_links),
     }
 
     context = {
         "concept": concept,
-        "graph_data": {"nodes": nodes, "edges": edges},
+        "graph_data": {
+            "nodes": display_nodes,
+            "edges": display_edges,
+            "groups": groups_meta,
+        },
         "graph_summary": graph_summary,
         "tty_summary": tty_summary,
         "graph_node_rows": graph_node_rows,
