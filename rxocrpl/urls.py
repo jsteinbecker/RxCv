@@ -7,6 +7,7 @@ urlpatterns = [
       path('', views.index, name='index'),
       path('stats/', views.stats, name='stats'),
       path('concept/<str:rxcui>/graph/', views.concept_graph_view, name='concept_graph'),
+      path('concept/<str:rxcui>/sync/', views.sync_concept_from_rxnorm, name='sync_concept'),
       path('tty/<str:tty>/', views.concept_tty_list_view, name='concept_tty_list'),
       path('ndc/data/loadall/', views.import_all_ndc_products, name='import_all_ndc_products'),
       path('ndc/data/loadpkg/', views.import_all_packages, name='import_all_packages'),

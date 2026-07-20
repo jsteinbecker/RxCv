@@ -4,7 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional, TypeVar, overload, Union, List, Dict
 
-from ..quantities import Quantity
+from fda import lookup_ndc_package
+from rxocrpl.quantities import Quantity
 
 
 @dataclass
@@ -33,7 +34,7 @@ class ApprovedProductReconstitutionScheme:
       final_volume_ml: Optional[float] = None
       verifying_rph: Optional[User] = None
 
-      def final_concentration(self) -> Optional[Quantity]:
+      def final_concentration (self) -> Optional[Quantity]:
             if self.final_volume_ml is not None:
                   return self.whole_product_strength / self.final_volume_ml
             elif self.diluent_volume_ml is not None:
@@ -41,13 +42,17 @@ class ApprovedProductReconstitutionScheme:
             else:
                   return None
 
+      def product_info (self):
+            return [lookup_ndc_package(ndc) for ndc in self.product_ndcs]
+
 
 if __name__ == "__main__":
       ncmc = Facility(name="NCMC", org="BHWR", facility_type="hospital", admin_id="NCMC-94")
       jts = User(name="Josh S", org=ncmc, user_type="CPHT")
+      cspenser = User(name="Cassie Spenser", org=ncmc, user_type="RPh")
 
       recon_01 = ApprovedProductReconstitutionScheme(
-            product_ndcs=["00093-1045-01"],
+            product_ndcs=["23155091431"],
             facility=ncmc,
             user=jts,
             whole_product_strength=Quantity(5_000_000, "[iU]"),
@@ -57,4 +62,5 @@ if __name__ == "__main__":
       )
 
       print(recon_01)
+      print(recon_01.product_info())
       print(recon_01.final_concentration())

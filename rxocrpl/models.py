@@ -82,10 +82,10 @@ class RxNormConcept(models.Model, RxConceptTraversalMixin):
       class Meta:
             app_label = "rxocrpl"
 
-      def parsed(self) -> RxNormParts | None:
+      def parsed (self) -> RxNormParts | None:
             return parse_rxnorm_string(self.name) if self.name else None
 
-      def __str__(self):
+      def __str__ (self):
             return f"[{self.tty}.{self.rxcui}] {self.name}"
 
 
@@ -105,11 +105,11 @@ class RxNormConceptRelation(models.Model):
             unique_together = ("source", "target", "rela")
             app_label = "rxocrpl"
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.source.rxcui} -[{self.rela}]-> {self.target.rxcui}"
 
 
-def check_quantified_form(name):
+def check_quantified_form (name):
       """Check if the clinical drug name contains a quantified form (e.g., '500 MG')."""
       if not name:
             return False
@@ -141,7 +141,7 @@ class ClinicalDrug(ComputedFieldsModel):
       quantified = ComputedField(models.BooleanField(default=False),
                                  depends=[("concept", ["name"])], compute=lambda self: check_quantified_form(self.concept.name))
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.concept.name} ({self.concept.rxcui})"
 
 
@@ -153,7 +153,7 @@ class Labeler(models.Model):
       verbose_name = models.CharField(max_length=255, null=True, blank=True)
       active = models.BooleanField(default=True)
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.name} ({self.labeler_code})"
 
 
@@ -163,27 +163,22 @@ class Product(ComputedFieldsModel):
       product_ndc = models.CharField(max_length=20, primary_key=True)
       generic_name = models.CharField(max_length=400)
       brand_name = models.CharField(max_length=100, null=True, blank=True)
-      labeler = models.ForeignKey(
-            Labeler, on_delete=models.SET_NULL, null=True, blank=True
-      )
+      labeler = models.ForeignKey(Labeler, on_delete=models.SET_NULL, null=True, blank=True)
       labeler_name = models.CharField(max_length=100)
       dosage_form = models.CharField(max_length=100)
       route = models.JSONField(default=list)  # List of route strings
       active_ingredients = models.JSONField(default=list)  # List of ingredient dicts
-      ingredient_count = ComputedField(
-            models.PositiveIntegerField(default=0),
-            depends=[("active_ingredients", [])],
-            compute=lambda self: len(self.active_ingredients),
-      )
+      ingredient_count = ComputedField(models.PositiveIntegerField(default=0),
+                                       depends=[("active_ingredients", [])], compute=lambda self: len(self.active_ingredients))
       rxcui_mapping = models.JSONField(default=dict)  # Mapping of NDC to RxCUI info
       active = models.BooleanField(default=True)
 
-      def __str__(self):
+      def __str__ (self):
             if self.as_substance():
                   return f"{self.as_substance()} ({self.product_ndc})"
             return f"{self.describe()} ({self.product_ndc})"
 
-      def to_dict(self) -> dict[str, Any]:
+      def to_dict (self) -> dict[str, Any]:
             return {
                   "product_ndc": self.product_ndc,
                   "generic_name": self.generic_name,
@@ -195,7 +190,7 @@ class Product(ComputedFieldsModel):
                   "rxcui_mapping": self.rxcui_mapping,
             }
 
-      def describe(self) -> str:
+      def describe (self) -> str:
             parts = [self.generic_name]
             if self.brand_name and self.brand_name.upper() != self.generic_name.upper():
                   parts.append(f"({self.brand_name})")
@@ -204,8 +199,8 @@ class Product(ComputedFieldsModel):
             return " ".join(parts)
 
       @classmethod
-      def from_fda_result(cls, result: object) -> "Product":
-            def _read(res, key, default=None):
+      def from_fda_result (cls, result: object) -> "Product":
+            def _read (res, key, default=None):
                   if isinstance(res, dict):
                         return res.get(key, default)
                   return getattr(res, key, default)
@@ -232,7 +227,7 @@ class Product(ComputedFieldsModel):
             )
 
       @classmethod
-      def lookup_by_ndc(cls, ndc: str, fetch_rxcui: bool = True) -> "Product | None":
+      def lookup_by_ndc (cls, ndc: str, fetch_rxcui: bool = True) -> "Product | None":
             from .fda import lookup_ndc_package
 
             results = lookup_ndc_package(ndc, fetch_rxcui=fetch_rxcui)
@@ -241,7 +236,7 @@ class Product(ComputedFieldsModel):
             return None
 
       @classmethod
-      def lookup_by_generic_name(
+      def lookup_by_generic_name (
                 cls,
                 generic_name: str,
                 dosage_form: str | None = None,
@@ -257,18 +252,16 @@ class Product(ComputedFieldsModel):
                   return [cls.from_fda_result(r) for r in results]
             return []
 
-      def as_substance(self):
-            substances = []
+      def as_substance (self) -> str:
+            substances: list[SubstanceQuantity] = []
             for ing in self.active_ingredients:
                   try:
-                        # Normalize ingredient dict keys if needed
-                        name = ing.get("name", ing.get("ingredient"))
+                        name = ing.get("name") or ing.get("ingredient")
                         if not name:
                               continue
 
                         strength = ing.get("strength", ing.get("value", ""))
                         unit = ing.get("unit", "")
-
                         full_str = f"{strength} {unit}".strip()
 
                         # Check for non-simplified concentrations like "500 mg / 5 mL"
@@ -291,25 +284,42 @@ class Product(ComputedFieldsModel):
                         else:
                               q = Quantity(full_str)
 
+                        if "/" in q.unit and q.dimension.is_dimensionless:
+                              q = q.to("%")
+
                         substances.append(
-                              SubstanceQuantity(
-                                    value=q.value, unit=q.unit, substance=Substance(name=name)
-                              )
+                              SubstanceQuantity(value=q.value, unit=q.unit, substance=Substance(name=name))
                         )
-                  except (ValueError, KeyError, TypeError):
+                  except (ValueError, KeyError, TypeError, AttributeError):
+                        # Skip only the bad ingredient, not the whole product
                         continue
-            return "; ".join(str(s) for s in substances)
+
+            if not substances:
+                  return ""
+
+            # RxNorm SCD-style ordering: alphabetical by ingredient name
+            substances.sort(key=lambda s: s.substance.name.lower())
+
+            return " / ".join(
+                  f"{s.substance.name.lower()} {self._format_strength(s.value, s.unit)}" for s in substances
+            )
+
+      @staticmethod
+      def _format_strength (value: float, unit: str) -> str:
+            """Render a strength the way RxNorm does: bare integer if whole, upper-cased unit."""
+            value_str = str(int(value)) if float(value).is_integer() else f"{value:g}"
+            if unit == "%":
+                  return f"{value_str}%"
+            return f"{value_str} {unit.upper()}"
 
       @property
-      def dailymed_url(self) -> str:
+      def dailymed_url (self) -> str:
             """Outgoing DailyMed URL for this product, for use as a detail-page href."""
             return get_dailymed_url(self.product_ndc)
 
 
 class ListedIngredient(models.Model):
-      product = models.ForeignKey(
-            Product, on_delete=models.CASCADE, related_name="ingredients", editable=False
-      )
+      product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="ingredients", editable=False)
       name = models.CharField(max_length=400)
       strength = models.CharField(max_length=300)
       unit = models.CharField(max_length=300)
@@ -317,7 +327,7 @@ class ListedIngredient(models.Model):
       class Meta:
             ordering = ["name"]
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.name} {self.strength} {self.unit}"
 
 
@@ -336,7 +346,7 @@ class PackagedProduct(ComputedFieldsModel):
             compute=lambda self: f"{self.product.product_ndc}-{self.package_code}",
       )
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.product.generic_name} - {self.description} ({self.package_ndc})"
 
       SEGMENT_RE = re.compile(
@@ -344,7 +354,7 @@ class PackagedProduct(ComputedFieldsModel):
             r"(?:\s+\((?P<ndc>[\d-]+)\))?\s*$"
       )
 
-      def parse_package_description(self):
+      def parse_package_description (self):
             """
             Parse a nested NDC package description into an ordered list of levels,
             outermost first.
@@ -368,16 +378,18 @@ class CspOrder(models.Model):
       """Pharmacy preparation order."""
 
       id = models.AutoField(primary_key=True)
-      reference_image = models.FileField(
-            upload_to="orders/reference/", null=True, blank=True
-      )
+      reference_image = models.FileField(upload_to="orders/reference/", null=True, blank=True)
       certified_subset = models.BooleanField(default=False)
       scanned_barcodes = models.JSONField(default=list, blank=True)
       expected_components = models.JSONField(default=list, blank=True)
       created_at = models.DateTimeField(auto_now_add=True)
 
-      def __str__(self):
+      def __str__ (self):
             return f"Order {self.id} ({self.created_at})"
+
+      class Meta:
+            verbose_name = "CSP Order"
+            verbose_name_plural = "CSP Orders"
 
 
 class VerificationImage(models.Model):
@@ -388,16 +400,14 @@ class VerificationImage(models.Model):
       )
       image = models.FileField(upload_to="orders/verification/")
 
-      def __str__(self):
+      def __str__ (self):
             return f"Verification image for Order {self.order.id}"
 
 
 class Component(models.Model):
       """A specific drug component within an order."""
 
-      order = models.ForeignKey(
-            CspOrder, related_name="components", on_delete=models.CASCADE
-      )
+      order = models.ForeignKey(CspOrder, related_name="components", on_delete=models.CASCADE)
       product = models.ForeignKey(Product, on_delete=models.PROTECT)
       # Quantities stored as magnitude + unit string (matching quantities.py logic)
       numerator_mag = models.DecimalField(max_digits=12, decimal_places=4)
@@ -410,38 +420,38 @@ class Component(models.Model):
       exp = models.CharField(max_length=100, null=True, blank=True)
       package_ndc = models.CharField(max_length=20, null=True, blank=True)
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.product.generic_name} in Order {self.order.id}"
 
       @property
-      def numerator(self):
+      def numerator (self):
             return Quantity(self.numerator_mag, self.numerator_unit)
 
       @numerator.setter
-      def numerator(self, q):
+      def numerator (self, q):
             self.numerator_mag = q.value
             self.numerator_unit = q.unit
 
       @property
-      def denominator(self):
+      def denominator (self):
             return Quantity(self.denominator_mag, self.denominator_unit)
 
       @denominator.setter
-      def denominator(self, q):
+      def denominator (self, q):
             self.denominator_mag = q.value
             self.denominator_unit = q.unit
 
       @property
-      def concentration(self) -> Quantity:
+      def concentration (self) -> Quantity:
             return self.get_concentration()
 
-      def get_concentration(self) -> Quantity:
+      def get_concentration (self) -> Quantity:
             return self.numerator / self.denominator
 
-      def concentration_str(self) -> str:
+      def concentration_str (self) -> str:
             return f"{self.numerator}/{self.denominator}"
 
-      def describe(self) -> str:
+      def describe (self) -> str:
             parts = [self.product.generic_name, self.concentration_str()]
             if self.product.dosage_form:
                   parts.append(self.product.dosage_form)
@@ -449,7 +459,7 @@ class Component(models.Model):
                   parts.append(f"x{self.quantity}")
             return " ".join(parts)
 
-      def to_dict(self) -> dict[str, Any]:
+      def to_dict (self) -> dict[str, Any]:
             return {
                   "product": self.product.to_dict() if self.product else None,
                   "numerator": str(self.numerator),
@@ -460,7 +470,7 @@ class Component(models.Model):
                   "package_ndc": self.package_ndc,
             }
 
-      def matches_ndc(self, ndc: str) -> bool:
+      def matches_ndc (self, ndc: str) -> bool:
             if self.package_ndc and self.package_ndc == ndc:
                   return True
             if self.product.product_ndc and self.product.product_ndc == ndc:
@@ -499,7 +509,7 @@ class OCRFields(models.Model):
 
       raw_texts = models.JSONField(default=list)
 
-      def __str__(self):
+      def __str__ (self):
             return f"OCR results (NDC: {self.ndc or self.barcode_ndc})"
 
 
@@ -512,7 +522,7 @@ class Organization(models.Model):
             verbose_name_plural = "Organizations"
             app_label = "rxocrpl"
 
-      def __str__(self):
+      def __str__ (self):
             return self.name
 
 
@@ -525,7 +535,7 @@ class Role(models.Model):
       class Meta:
             app_label = "rxocrpl"
 
-      def __str__(self):
+      def __str__ (self):
             return self.name
 
 
@@ -553,11 +563,11 @@ class Facility(models.Model):
             verbose_name_plural = "Facilities"
             app_label = "rxocrpl"
 
-      def __str__(self):
+      def __str__ (self):
             return self.name
 
       @property
-      def current_admins(self):
+      def current_admins (self):
             """Returns users with an active 'facility_admin' role for this facility."""
             return (
                   User.objects.filter(
@@ -582,10 +592,10 @@ class User(models.Model):
       class Meta:
             app_label = "rxocrpl"
 
-      def __str__(self):
+      def __str__ (self):
             return self.name
 
-      def has_role(self, role_name: str, facility=None, organization=None) -> bool:
+      def has_role (self, role_name: str, facility=None, organization=None) -> bool:
             """
             Check if user holds an active grant for the role at the given scope,
             considering hierarchy inheritance.
@@ -624,7 +634,7 @@ class User(models.Model):
             return False
 
       @property
-      def is_admin(self) -> bool:
+      def is_admin (self) -> bool:
             """
             Replacement for a simple boolean flag.
             Returns True if the user has any active admin grant.
@@ -700,7 +710,7 @@ class RoleGrant(models.Model):
                   )
             ]
 
-      def clean(self):
+      def clean (self):
             # Enforce scope: org_id OR facility_id, never both
             if self.organization and self.facility:
                   raise ValidationError(
@@ -717,7 +727,7 @@ class RoleGrant(models.Model):
                         "granted_by can only be null if reason is 'system_bootstrap'."
                   )
 
-      def save(self, *args, **kwargs):
+      def save (self, *args, **kwargs):
             is_new = self._state.adding
             self.full_clean()
 
@@ -738,7 +748,7 @@ class RoleGrant(models.Model):
                         notes=f"Initial grant. Reason: {self.reason}",
                   )
 
-      def revoke(self, revoked_by: User, reason: str = ""):
+      def revoke (self, revoked_by: User, reason: str = ""):
             """Closes out the grant record (append-only principle)."""
             self.revoked_by = revoked_by
             self.revoked_at = timezone.now()
@@ -747,7 +757,7 @@ class RoleGrant(models.Model):
                   grant=self, event_type="grant_revoked", actor=revoked_by, notes=reason
             )
 
-      def _granter_has_authority(self) -> bool:
+      def _granter_has_authority (self) -> bool:
             """
             Verify granted_by holds an active grant at that scope or an ancestor scope.
             Ideally this would check for a specific 'admin' role, but here we check for any active grant.
@@ -760,13 +770,13 @@ class RoleGrant(models.Model):
             ) or self.granted_by.has_role("facility_admin", facility=self.facility)
 
       @property
-      def is_active(self) -> bool:
+      def is_active (self) -> bool:
             now = timezone.now()
             return self.revoked_at is None and (
                       self.expires_at is None or self.expires_at > now
             )
 
-      def __str__(self):
+      def __str__ (self):
             scope = self.organization or self.facility
             return f"{self.user} granted {self.role} at {scope}"
 
@@ -787,7 +797,7 @@ class RoleGrantEvent(models.Model):
       class Meta:
             app_label = "rxocrpl"
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.event_type} on {self.grant.id} at {self.timestamp}"
 
 
@@ -807,17 +817,17 @@ class ApprovedProductReconstitutionScheme(models.Model):
             max_digits=12, decimal_places=4, null=True, blank=True
       )
 
-      def __str__(self):
+      def __str__ (self):
             return f"Scheme for {self.product_ndcs} at {self.facility.name}"
 
       @property
-      def whole_product_strength(self):
+      def whole_product_strength (self):
             return Quantity(
                   self.whole_product_strength_mag, self.whole_product_strength_unit
             )
 
       @whole_product_strength.setter
-      def whole_product_strength(self, q):
+      def whole_product_strength (self, q):
             self.whole_product_strength_mag = q.value
             self.whole_product_strength_unit = q.unit
 
@@ -830,5 +840,5 @@ class ProductRxNormMapping(models.Model):
       tty = models.CharField(max_length=10, null=True, blank=True)
       name = models.CharField(max_length=255, null=True, blank=True)
 
-      def __str__(self):
+      def __str__ (self):
             return f"{self.product_ndc} -> {self.rxcui} ({self.tty})"

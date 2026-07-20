@@ -5,6 +5,7 @@ import re
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from django.forms import forms, fields
 from django.db.models import Q
 
@@ -452,9 +453,35 @@ def concept_graph_view(request, rxcui):
     return render(request, "rxocrpl/concept_graph.html", context)
 
 
+@require_POST
+def sync_concept_from_rxnorm(request, rxcui):
+    from rxocrpl.rxgraph.pipeline import materialize_concept
+    try:
+        result = materialize_concept(rxcui)
+    except Exception as exc:
+        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+
+    return JsonResponse({
+        "status": "ok",
+        "rxcui": rxcui,
+        "concepts": len(result.concepts),
+        "created_concepts": result.created_concepts,
+        "relations": len(result.relations),
+        "created_relations": result.created_relations,
+    })
+
+
 def concept_tty_list_view(request, tty):
+    query = request.GET.get("q", "").strip()
     concepts = RxNormConcept.objects.filter(tty=tty).order_by("name")
-    context = {"tty": tty, "concepts": concepts}
+    if query:
+        concepts = concepts.filter(
+            Q(name__icontains=query) | Q(rxcui__icontains=query)
+        )
+    total = RxNormConcept.objects.filter(tty=tty).count()
+    paginator = Paginator(concepts, 50)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    context = {"tty": tty, "page_obj": page_obj, "query": query, "total": total}
     return render(request, "rxocrpl/concept_tty_list.html", context)
 
 
@@ -523,27 +550,44 @@ def ndc_product_detail_view(request, ndc):
         name_nums = {n.rstrip("0").rstrip(".") for n in name_nums}
         return bool(name_nums & strengths)
 
-    possible_concepts = sorted(
+    def concept_ingredient_count(name):
+        # Count "/" before the first digit (strength section) to get number of drug components.
+        # e.g. "Amoxicillin / Clavulanate 500 MG / 125 MG" → base="Amoxicillin / Clavulanate " → 2
+        base = re.split(r"\d", name)[0]
+        return base.count("/") + 1
+
+    product_ingredient_count = ingredients.count()
+
+    filtered = sorted(
         (c for c in concepts if c.rxcui not in confirmed_rxcuis and is_relevant(c)),
         key=lambda c: (c.tty, c.name),
     )
+
+    close_concepts = [c for c in filtered if concept_ingredient_count(c.name) <= product_ingredient_count]
+    obscure_concepts = [c for c in filtered if concept_ingredient_count(c.name) > product_ingredient_count]
 
     context = {
         "product": product,
         "packages": packages,
         "ingredients": ingredients,
         "confirmed_mappings": confirmed_mappings,
-        "possible_concepts": possible_concepts,
+        "close_concepts": close_concepts,
+        "obscure_concepts": obscure_concepts,
         "dailymed_url": get_dailymed_url(product.product_ndc),
     }
     return render(request, "rxocrpl/ndc_product_detail.html", context)
 
 
 def labeler_list_view(request):
+    query = request.GET.get("q", "").strip()
     labelers = Labeler.objects.filter(active=True).order_by("name")
+    if query:
+        labelers = labelers.filter(
+            Q(name__icontains=query) | Q(labeler_code__icontains=query)
+        )
     paginator = Paginator(labelers, 50)
     page_obj = paginator.get_page(request.GET.get("page"))
-    context = {"page_obj": page_obj}
+    context = {"page_obj": page_obj, "query": query}
     return render(request, "rxocrpl/labeler_list.html", context)
 
 

@@ -85,6 +85,59 @@
             padding: 2px 4px;
             border-radius: 3px;
         }
+
+        .search-form {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-form input[type="text"] {
+            flex: 1;
+            max-width: 320px;
+            padding: 8px 12px;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            background: var(--bg-app);
+            color: var(--fg-primary);
+            font-size: 0.9rem;
+        }
+
+        .search-form input[type="text"]:focus {
+            outline: none;
+            border-color: var(--brand);
+        }
+
+        .search-form button {
+            padding: 8px 16px;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            background: var(--brand);
+            color: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .search-form button:hover { opacity: 0.9; }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .pagination a {
+            color: var(--brand);
+            text-decoration: none;
+            padding: 4px 8px;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+        }
+
+        .pagination a:hover { background: var(--bg-row-hover); }
+        .pagination .current { padding: 4px 8px; color: var(--fg-secondary); }
     </style>
 {% endblock %}
 
@@ -109,9 +162,20 @@
     </div>
 
     <div class="card">
-        <div class="count-info" style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--fg-muted);">
-            Total Concepts: <strong>{{ concepts|length }}</strong>
+        <form method="get" class="search-form">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search name or RXCUI…" autofocus>
+            <button type="submit">Search</button>
+            {% if query %}<a href="?q=" style="align-self: center; font-size: 0.85rem; color: var(--fg-muted);">Clear</a>{% endif %}
+        </form>
+
+        <div class="count-info" style="font-size: 0.9rem; color: var(--fg-muted);">
+            {% if query %}
+                {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for "<strong>{{ query }}</strong>" · {{ total }} total {{ tty }} concepts
+            {% else %}
+                {{ total }} {{ tty }} concept{{ total|pluralize }}
+            {% endif %}
         </div>
+
         <table>
             <thead>
             <tr>
@@ -121,7 +185,7 @@
             </tr>
             </thead>
             <tbody>
-            {% for concept in concepts %}
+            {% for concept in page_obj %}
                 <tr>
                     <td><span class="rxcui">{{ concept.rxcui }}</span></td>
                     <td>{{ concept.name }}</td>
@@ -131,10 +195,22 @@
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="3">No concepts found for this TTY.</td>
+                    <td colspan="3">No concepts found{% if query %} for "{{ query }}"{% endif %}.</td>
                 </tr>
             {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?page=1{% if query %}&q={{ query }}{% endif %}">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}">Previous</a>
+        {% endif %}
+        <span class="current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}">Last &raquo;</a>
+        {% endif %}
     </div>
 {% endblock %}

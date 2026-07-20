@@ -6,6 +6,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webcola@3.4.0/WebCola/cola.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-cola@2.5.1/cytoscape-cola.min.js"></script>
     <style>
         .graph-layout {
             display: grid;
@@ -13,6 +15,7 @@
             gap: 1.5rem;
             height: 700px;
         }
+
         #cy {
             width: 100%;
             height: 100%;
@@ -20,12 +23,14 @@
             border-radius: var(--radius-md);
             background: #fff;
         }
+
         .controls {
             margin-bottom: 1rem;
             display: flex;
             gap: 0.5rem;
             align-items: center;
         }
+
         .details-panel {
             background: var(--bg-surface);
             border: 1px solid var(--border-strong);
@@ -36,6 +41,7 @@
             flex-direction: column;
             gap: 1rem;
         }
+
         .legend {
             display: flex;
             flex-wrap: wrap;
@@ -46,6 +52,7 @@
             border: 1px solid var(--border-default);
             border-radius: var(--radius-sm);
         }
+
         .legend-item {
             display: flex;
             align-items: center;
@@ -53,19 +60,23 @@
             font-size: 11px;
             color: var(--fg-secondary);
         }
+
         .legend-color {
             width: 12px;
             height: 12px;
             border-radius: 2px;
         }
+
         .node-info-card {
             border-left: 4px solid var(--brand);
             padding-left: 0.75rem;
         }
+
         .node-info-card h4 {
             margin: 0;
             font-size: 14px;
         }
+
         .tty-badge {
             font-size: 10px;
             padding: 1px 4px;
@@ -74,250 +85,412 @@
             color: var(--fg-tertiary);
             border: 1px solid var(--border-default);
         }
+
+        .products-section {
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 0.75rem;
+        }
+
+        .products-section h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 13px;
+        }
+
+        .product-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .product-list li a {
+            display: block;
+            font-size: 11px;
+            color: var(--brand);
+            text-decoration: none;
+            padding: 3px 5px;
+            border-radius: 3px;
+            line-height: 1.3;
+        }
+
+        .product-list li a:hover {
+            background: var(--bg-app);
+            text-decoration: underline;
+        }
+
+        .product-list li .match-hint {
+            font-size: 10px;
+            color: var(--fg-tertiary);
+            margin-left: 4px;
+        }
+
+        .product-ndc {
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--fg-secondary);
+        }
     </style>
 {% endblock %}
 
 {% block content %}
-<div style="font-size: 0.85rem; color: var(--fg-muted); margin-bottom: 1rem;">
-    <a href="{% url 'rxocrpl:index' %}" style="color: var(--brand); text-decoration: none;">RxOCR Pipeline</a> &rsaquo;
-    <a href="{% url 'rxocrpl:concept_tty_list' concept.tty %}" style="color: var(--brand); text-decoration: none;">{{ concept.tty }} Concepts</a> &rsaquo;
-    {{ concept.name }}
-</div>
+    <div style="font-size: 0.85rem; color: var(--fg-muted); margin-bottom: 1rem;">
+        <a href="{% url 'rxocrpl:index' %}" style="color: var(--brand); text-decoration: none;">RxOCR Pipeline</a>
+        &rsaquo;
+        <a href="{% url 'rxocrpl:concept_tty_list' concept.tty %}"
+           style="color: var(--brand); text-decoration: none;">{{ concept.tty }} Concepts</a> &rsaquo;
+        {{ concept.name }}
+    </div>
 
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <div>
-            <h1 style="margin:0">{{ concept.name }}</h1>
-            <p style="margin:0"><strong>RXCUI:</strong> {{ concept.rxcui }} | <strong>TTY:</strong> {{ concept.tty }}</p>
-        </div>
-        <div class="controls">
-            <a href="{% url 'rxocrpl:concept_tty_list' concept.tty %}" class="button button-secondary">← {{ concept.tty }} List</a>
-            <button class="button button-secondary" onclick="runLayout('dagre')">Hierarchical</button>
-            <button class="button button-secondary" onclick="runLayout('cose')">Force-Directed</button>
-            <button class="button button-secondary" onclick="cy.fit()">Fit</button>
-            <button class="button button-secondary" onclick="location.reload()">Collapse Groups</button>
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h1 style="margin:0">{{ concept.name }}</h1>
+                <p style="margin:0"><strong>RXCUI:</strong> {{ concept.rxcui }} |
+                    <strong>TTY:</strong> {{ concept.tty }}</p>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem;">
+                <div class="controls">
+                    <button class="button button-secondary" onclick="runLayout('dagre')">Hierarchical</button>
+                    <button class="button button-secondary" onclick="runLayout('cose')">Force-Directed (Cola)</button>
+                    <button class="button button-secondary" onclick="cy.fit()">Fit</button>
+                    <button class="button button-secondary" onclick="location.reload()">Collapse Groups</button>
+                </div>
+            </div>
         </div>
     </div>
-</div>
 
-<div class="graph-layout">
-    <div id="cy"></div>
-    <div class="details-panel" id="details-panel">
-        <h3 style="margin:0">Concept Details</h3>
-        <div id="details-content">
-            <p class="caption">Click a node to see more information.</p>
+    <div class="graph-layout">
+        <div id="cy"></div>
+        <div class="details-panel" id="details-panel">
+            <h3 style="margin:0">Concept Details</h3>
+            <div id="details-content">
+                <p class="caption">Click a node to see more information.</p>
+            </div>
+            <button id="sync-btn" class="button button-primary" onclick="syncFromRxNorm()">Sync from RxNorm</button>
+            <span id="sync-status" style="font-size: 11px;"></span>
+            <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 0.5rem 0;">
+            <h4 style="margin:0">Legend (TTY)</h4>
+            <div class="legend" id="legend"></div>
+
+            {% if confirmed_product_links %}
+            <div class="products-section">
+                <h4>Mapped Products ({{ confirmed_product_links|length }})</h4>
+                <ul class="product-list">
+                    {% for link in confirmed_product_links %}
+                    {% if link.product %}
+                    <li>
+                        <a href="{% url 'rxocrpl:ndc_product_detail' link.product.product_ndc %}">
+                            {{ link.product.brand_name|default:link.product.generic_name }}
+                            <span class="product-ndc">{{ link.product.product_ndc }}</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if possible_product_links %}
+            <div class="products-section">
+                <h4>Possible Products ({{ possible_product_links|length }})</h4>
+                <ul class="product-list">
+                    {% for link in possible_product_links %}
+                    <li>
+                        <a href="{% url 'rxocrpl:ndc_product_detail' link.product.product_ndc %}">
+                            {{ link.product.brand_name|default:link.product.generic_name }}
+                            <span class="product-ndc">{{ link.product.product_ndc }}</span>
+                            <span class="match-hint">via "{{ link.matched_term }}"</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if not confirmed_product_links and not possible_product_links %}
+            <div class="products-section">
+                <h4>Related Products</h4>
+                <p class="caption" style="font-size: 11px;">No products linked to this concept.</p>
+            </div>
+            {% endif %}
         </div>
-        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 0.5rem 0;">
-        <h4 style="margin:0">Legend (TTY)</h4>
-        <div class="legend" id="legend"></div>
     </div>
-</div>
 
-{{ graph_data|json_script:"graph-data" }}
+    {{ graph_data|json_script:"graph-data" }}
 
-<script>
-    const COLORS = {
-        'SCD': '#3a7bd5',
-        'SBD': '#1e40af',
-        'SCDC': '#c026d3',
-        'SBDC': '#86198f',
-        'IN': '#059669',
-        'PIN': '#10b981',
-        'BN': '#ea580c',
-        'SCDG': '#d97706',
-        'SBDG': '#92400e',
-        'DEFAULT': '#94a0b0'
-    };
-
-    const TTY_LABELS = {
-        'IN': 'Ingredient',
-        'PIN': 'Precise Ingredient',
-        'SCDC': 'Clinical Component',
-        'SBDC': 'Branded Component',
-        'SCD': 'Clinical Drug',
-        'SBD': 'Branded Drug',
-        'BN': 'Branded Name',
-        'SCDG': 'Clinical Dose Form Group',
-        'SBDG': 'Branded Dose Form Group'
-    };
-
-    // Initialize legend
-    const legendEl = document.getElementById('legend');
-    Object.keys(COLORS).forEach(tty => {
-        if (tty === 'DEFAULT') return;
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `<div class="legend-color" style="background: ${COLORS[tty]}"></div><span>${tty}</span>`;
-        legendEl.appendChild(item);
-    });
-
-    var cy = cytoscape({
-        container: document.getElementById('cy'),
-        elements: [],
-        style: [
-            {
-                selector: 'node',
-                style: {
-                    'background-color': 'data(color)',
-                    'label': 'data(label)',
-                    'text-wrap': 'wrap',
-                    'text-max-width': '80px',
-                    'text-valign': 'center',
-                    'text-halign': 'center',
-                    'font-size': '8px',
-                    'width': '50px',
-                    'height': '50px',
-                    'color': '#fff',
-                    'text-outline-width': 1,
-                    'text-outline-color': 'data(color)',
-                    'z-index': 1
-                }
-            },
-            {
-                selector: 'node[is_anchor]',
-                style: {
-                    'width': '70px',
-                    'height': '70px',
-                    'font-size': '10px',
-                    'font-weight': 'bold',
-                    'border-width': 3,
-                    'border-color': '#000',
-                    'z-index': 10
-                }
-            },
-            {
-                selector: 'node[tty]',
-                style: {
-                    'background-color': function (node) {
-                        return COLORS[node.data('tty')] || COLORS.DEFAULT;
-                    },
-                    'text-outline-color': function (node) {
-                        return COLORS[node.data('tty')] || COLORS.DEFAULT;
-                    }
-                }
-            },
-            {
-                selector: 'node[?is_group]',
-                style: {
-                    'shape': 'round-rectangle',
-                    'background-color': '#94a0b0',
-                    'text-outline-color': '#94a0b0',
-                    'border-width': 2,
-                    'border-style': 'dashed',
-                    'border-color': '#475569',
-                    'width': function (node) { return 40 + Math.min(60, Math.sqrt(node.data('count')) * 12); },
-                    'height': function (node) { return 40 + Math.min(60, Math.sqrt(node.data('count')) * 12); },
-                    'font-size': '9px',
-                    'font-weight': 'bold'
-                }
-            },
-            {
-                selector: 'edge',
-                style: {
-                    'width': function (edge) { return Math.min(6, 1.5 + Math.log2((edge.data('count') || 1))); },
-                    'line-color': '#cbd5e1',
-                    'target-arrow-color': '#cbd5e1',
-                    'target-arrow-shape': 'triangle',
-                    'curve-style': 'bezier',
-                    'label': function (edge) {
-                        const count = edge.data('count') || 1;
-                        return count > 1 ? `${edge.data('label')} (${count})` : edge.data('label');
-                    },
-                    'font-size': '7px',
-                    'text-rotation': 'autorotate',
-                    'text-margin-y': -8,
-                    'opacity': 0.8
-                }
-            },
-            {
-                selector: 'node:selected',
-                style: {
-                    'border-width': 4,
-                    'border-color': '#333',
-                    'border-opacity': 0.5
-                }
-            }
-        ]
-    });
-
-    const graphData = JSON.parse(document.getElementById('graph-data').textContent);
-    const groupsMeta = graphData.groups || {};
-    cy.add({ nodes: graphData.nodes, edges: graphData.edges });
-
-    function expandGroup(groupNode) {
-        const groupId = groupNode.data('id');
-        const meta = groupsMeta[groupId];
-        if (!meta) return;
-
-        const anchorId = "{{ concept.rxcui }}";
-        const newEles = [];
-        meta.members.forEach(member => {
-            if (cy.getElementById(member.id).empty()) {
-                newEles.push({
-                    data: {
-                        id: member.id,
-                        label: member.label,
-                        tty: member.tty
-                    }
-                });
-            }
-            const source = meta.direction === 'out' ? anchorId : member.id;
-            const target = meta.direction === 'out' ? member.id : anchorId;
-            newEles.push({
-                data: {
-                    id: `expanded__${groupId}__${member.id}`,
-                    source: source,
-                    target: target,
-                    label: meta.rela
-                }
-            });
-        });
-
-        cy.remove(groupNode);
-        cy.add(newEles);
-        runLayout(cy.nodes().length > 15 ? 'dagre' : 'cose');
-    }
-
-    function runLayout(name) {
-        let options = {
-            name: name,
-            animate: true,
-            animationDuration: 500
+    <script>
+        const COLORS = {
+            'SCD': '#3a7bd5',
+            'SBD': '#1e40af',
+            'SCDC': '#c026d3',
+            'SBDC': '#86198f',
+            'IN': '#059669',
+            'PIN': '#10b981',
+            'BN': '#ea580c',
+            'SCDG': '#d97706',
+            'SBDG': '#92400e',
+            'DEFAULT': '#94a0b0'
         };
 
-        if (name === 'dagre') {
-            options.rankDir = 'LR';
-            options.ranker = 'network-simplex';
-            options.nodeSep = 30;
-            options.rankSep = 100;
-        } else if (name === 'cose') {
-            options.nodeOverlap = 20;
-            options.componentSpacing = 40;
-            options.refresh = 20;
-            options.fit = true;
-            options.padding = 30;
-            options.nodeRepulsion = function( node ){ return 2048; };
+        const TTY_LABELS = {
+            'IN': 'Ingredient',
+            'PIN': 'Precise Ingredient',
+            'SCDC': 'Clinical Component',
+            'SBDC': 'Branded Component',
+            'SCD': 'Clinical Drug',
+            'SBD': 'Branded Drug',
+            'BN': 'Branded Name',
+            'SCDG': 'Clinical Dose Form Group',
+            'SBDG': 'Branded Dose Form Group'
+        };
+
+        // Initialize legend
+        const legendEl = document.getElementById('legend');
+        Object.keys(COLORS).forEach(tty => {
+            if (tty === 'DEFAULT') return;
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.innerHTML = `<div class="legend-color" style="background: ${COLORS[tty]}"></div><span>${tty}</span>`;
+            legendEl.appendChild(item);
+        });
+
+        var cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: [],
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'shape': 'round-rectangle',
+                        'background-color': 'data(color)',
+                        'label': 'data(displayLabel)',
+                        'text-wrap': 'wrap',
+                        'text-max-width': '160px',
+                        'text-valign': 'center',
+                        'text-halign': 'center',
+                        'font-size': '13px',
+                        'width': 'label',
+                        'height': 'label',
+                        'padding': '5px',
+                        'color': '#fff',
+                        'text-outline-width': 1,
+                        'text-outline-color': 'data(color)',
+                        'z-index': 1
+                    }
+                },
+                {
+                    selector: 'node[is_anchor]',
+                    style: {
+                        'font-size': '15px',
+                        'font-weight': 'bold',
+                        'padding': '7px',
+                        'border-width': 3,
+                        'border-color': '#000',
+                        'z-index': 10
+                    }
+                },
+                {
+                    selector: 'node[tty]',
+                    style: {
+                        'background-color': function (node) {
+                            return COLORS[node.data('tty')] || COLORS.DEFAULT;
+                        },
+                        'text-outline-color': function (node) {
+                            return COLORS[node.data('tty')] || COLORS.DEFAULT;
+                        }
+                    }
+                },
+                {
+                    selector: 'node[?is_group]',
+                    style: {
+                        'shape': 'round-rectangle',
+                        'background-color': '#94a0b0',
+                        'text-outline-color': '#94a0b0',
+                        'border-width': 2,
+                        'border-style': 'dashed',
+                        'border-color': '#475569',
+                        'width': 'label',
+                        'height': 'label',
+                        'padding': '5px',
+                        'font-size': '13px',
+                        'font-weight': 'bold'
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': function (edge) {
+                            return Math.min(6, 1.5 + Math.log2((edge.data('count') || 1)));
+                        },
+                        'line-color': '#cbd5e1',
+                        'target-arrow-color': '#cbd5e1',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'taxi',
+                        'taxi-turn': 0.5,
+                        'taxi-direction': 'auto',
+                        'taxi-turn-min-distance': 8,
+                        'label': '',
+                        'opacity': 0.8
+                    }
+                },
+                {
+                    selector: 'node:selected',
+                    style: {
+                        'border-width': 4,
+                        'border-color': '#333',
+                        'border-opacity': 0.5
+                    }
+                }
+            ]
+        });
+
+        const graphData = JSON.parse(document.getElementById('graph-data').textContent);
+        const groupsMeta = graphData.groups || {};
+
+        const anchorNode = graphData.nodes.find(n => n.data.is_anchor);
+        const anchorLabel = anchorNode ? anchorNode.data.label : null;
+
+        function shortenLabel(label) {
+            if (!anchorLabel || label === anchorLabel) return label;
+            const idx = label.indexOf(anchorLabel);
+            if (idx === -1) return label;
+            let rest = (label.slice(0, idx) + label.slice(idx + anchorLabel.length)).trim();
+            rest = rest.replace(/^[\s\/\-,]+/, '').replace(/[\s\/\-,]+$/, '').trim();
+            return rest ? '… ' + rest : label;
         }
 
-        cy.layout(options).run();
-    }
+        graphData.nodes.forEach(n => {
+            n.data.displayLabel = n.data.is_anchor ? n.data.label : shortenLabel(n.data.label);
+        });
 
-    // Default layout: hierarchical for complex graphs
-    runLayout(graphData.nodes.length > 15 ? 'dagre' : 'cose');
+        cy.add({nodes: graphData.nodes, edges: graphData.edges});
 
-    cy.on('tap', 'node', function (evt) {
-        const node = evt.target;
-        const data = node.data();
+        const anchorId = "{{ concept.rxcui }}";
 
-        if (data.is_group) {
-            expandGroup(node);
-            return;
+        function collapseGroup(groupId) {
+            const meta = groupsMeta[groupId];
+            if (!meta) return;
+            const anyExpanded = meta.members.some(m => !cy.getElementById(m.id).empty());
+            if (!anyExpanded) return;
+
+            meta.members.forEach(member => {
+                cy.remove(cy.getElementById(member.id));
+                cy.remove(cy.getElementById(`expanded__${groupId}__${member.id}`));
+            });
+
+            const src = meta.direction === 'out' ? anchorId : groupId;
+            const tgt = meta.direction === 'out' ? groupId : anchorId;
+            cy.add([
+                {
+                    data: {
+                        id: groupId,
+                        label: `+${meta.members.length} ${meta.tty || 'concepts'}`,
+                        displayLabel: `+${meta.members.length} ${meta.tty || 'concepts'}`,
+                        tty: meta.tty,
+                        is_group: true,
+                        count: meta.members.length,
+                        rela: meta.rela,
+                    }
+                },
+                {
+                    data: {
+                        id: `ge__${groupId}`,
+                        source: src,
+                        target: tgt,
+                        label: meta.rela,
+                        count: meta.members.length,
+                    }
+                }
+            ]);
         }
 
-        const exploreUrl = "{% url 'rxocrpl:concept_graph' '000000' %}".replace('000000', data.id);
+        function expandGroup(groupNode) {
+            const groupId = groupNode.data('id');
+            const meta = groupsMeta[groupId];
+            if (!meta) return;
 
-        const content = document.getElementById('details-content');
-        content.innerHTML = `
+            Object.keys(groupsMeta).forEach(otherId => {
+                if (otherId !== groupId) collapseGroup(otherId);
+            });
+            const newEles = [];
+            meta.members.forEach(member => {
+                if (cy.getElementById(member.id).empty()) {
+                    newEles.push({
+                        data: {
+                            id: member.id,
+                            label: member.label,
+                            displayLabel: shortenLabel(member.label),
+                            tty: member.tty
+                        }
+                    });
+                }
+                const source = meta.direction === 'out' ? anchorId : member.id;
+                const target = meta.direction === 'out' ? member.id : anchorId;
+                newEles.push({
+                    data: {
+                        id: `expanded__${groupId}__${member.id}`,
+                        source: source,
+                        target: target,
+                        label: meta.rela
+                    }
+                });
+            });
+
+            cy.remove(groupNode);
+            cy.add(newEles);
+            runLayout('dagre');
+        }
+
+        function runLayout(name) {
+            let options = {
+                name: name,
+                animate: true,
+                animationDuration: 500
+            };
+
+            if (name === 'dagre') {
+                options.name = 'dagre';
+                options.rankDir = 'TB';
+                options.ranker = 'network-simplex';
+                options.nodeSep = 25;
+                options.rankSep = 55;
+                options.edgeSep = 5;
+                options.marginX = 10;
+                options.marginY = 10;
+                options.nodeDimensionsIncludeLabels = true;
+                options.fit = true;
+                options.padding = 15;
+            } else if (name === 'cose') {
+                options.name = 'cola';
+                options.avoidOverlap = true;
+                options.nodeDimensionsIncludeLabels = true;
+                options.flow = { axis: 'x', minSeparation: 55 };
+                options.edgeLength = 70;
+                options.padding = 15;
+                options.maxSimulationTime = 3000;
+                options.fit = true;
+            }
+
+            cy.layout(options).run();
+        }
+
+        runLayout('dagre');
+
+        cy.on('tap', 'node', function (evt) {
+            const node = evt.target;
+            const data = node.data();
+
+            if (data.is_group) {
+                expandGroup(node);
+                return;
+            }
+
+            const exploreUrl = "{% url 'rxocrpl:concept_graph' '000000' %}".replace('000000', data.id);
+
+            const content = document.getElementById('details-content');
+            content.innerHTML = `
             <div class="node-info-card">
                 <span class="tty-badge">${data.tty}</span>
                 <h4>${data.label}</h4>
@@ -329,25 +502,63 @@
             </div>
         `;
 
-        // Highlight connected edges
-        cy.elements().removeClass('highlighted');
-        node.connectedEdges().addClass('highlighted');
-    });
-
-    cy.on('tap', function(event) {
-        if (event.target === cy) {
+            // Highlight connected edges
             cy.elements().removeClass('highlighted');
-            document.getElementById('details-content').innerHTML = '<p class="caption">Click a node to see more information.</p>';
+            node.connectedEdges().addClass('highlighted');
+        });
+
+        cy.on('tap', function (event) {
+            if (event.target === cy) {
+                cy.elements().removeClass('highlighted');
+                document.getElementById('details-content').innerHTML = '<p class="caption">Click a node to see more information.</p>';
+            }
+        });
+
+        // Add highlighting style
+        cy.style()
+            .selector('edge.highlighted').style({
+                'line-color': '#3b82f6',
+                'target-arrow-color': '#3b82f6',
+                'width': 3,
+                'opacity': 1
+            })
+            .update();
+
+        async function syncFromRxNorm() {
+            const btn = document.getElementById('sync-btn');
+            const statusEl = document.getElementById('sync-status');
+            btn.disabled = true;
+            btn.textContent = 'Syncing…';
+            statusEl.style.color = 'var(--fg-secondary)';
+            statusEl.textContent = 'Fetching from RxNorm API—this may take a few seconds.';
+
+            const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? '';
+            const url = "{% url 'rxocrpl:sync_concept' concept.rxcui %}";
+
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken},
+                });
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    const msg = `+${data.created_concepts} concepts, +${data.created_relations} relations (${data.concepts} total). Reloading…`;
+                    statusEl.style.color = 'var(--success, #059669)';
+                    statusEl.textContent = msg;
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    statusEl.style.color = 'var(--error, #dc2626)';
+                    statusEl.textContent = data.message || 'Sync failed.';
+                    btn.disabled = false;
+                    btn.textContent = 'Sync from RxNorm';
+                }
+            } catch (err) {
+                statusEl.style.color = 'var(--error, #dc2626)';
+                statusEl.textContent = String(err);
+                btn.disabled = false;
+                btn.textContent = 'Sync from RxNorm';
+            }
         }
-    });
 
-    // Add highlighting style
-    cy.style().selector('edge.highlighted').style({
-        'line-color': '#3b82f6',
-        'target-arrow-color': '#3b82f6',
-        'width': 3,
-        'opacity': 1
-    }).update();
-
-</script>
+    </script>
 {% endblock %}

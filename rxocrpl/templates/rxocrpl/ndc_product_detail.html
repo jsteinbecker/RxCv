@@ -237,30 +237,60 @@
         </div>
     </div>
 
-    {% if possible_concepts %}
+    {% if close_concepts or obscure_concepts %}
         <div class="card">
             <h2>Related RxNorm Concepts</h2>
-            <table>
-                <thead>
-                <tr>
-                    <th>RXCUI</th>
-                    <th>Name</th>
-                    <th>TTY</th>
-                    <th></th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for concept in possible_concepts %}
+
+            {% if close_concepts %}
+                <table>
+                    <thead>
                     <tr>
-                        <td><span class="rxcui-code">{{ concept.rxcui }}</span></td>
-                        <td>{{ concept.name }}</td>
-                        <td><span class="tty-badge">{{ concept.tty }}</span></td>
-                        <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View
-                            Graph</a></td>
+                        <th>RXCUI</th>
+                        <th>Name</th>
+                        <th>TTY</th>
+                        <th></th>
                     </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                    {% for concept in close_concepts %}
+                        <tr>
+                            <td><span class="rxcui-code">{{ concept.rxcui }}</span></td>
+                            <td>{{ concept.name }}</td>
+                            <td><span class="tty-badge">{{ concept.tty }}</span></td>
+                            <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View Graph</a></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+
+            {% if obscure_concepts %}
+                <details style="margin-top: 1.25rem;">
+                    <summary style="cursor: pointer; font-size: 0.85rem; color: var(--fg-muted); user-select: none;">
+                        {{ obscure_concepts|length }} combination product{{ obscure_concepts|length|pluralize }} (less directly related)
+                    </summary>
+                    <table style="margin-top: 0.75rem; opacity: 0.7;">
+                        <thead>
+                        <tr>
+                            <th>RXCUI</th>
+                            <th>Name</th>
+                            <th>TTY</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for concept in obscure_concepts %}
+                            <tr>
+                                <td><span class="rxcui-code">{{ concept.rxcui }}</span></td>
+                                <td>{{ concept.name }}</td>
+                                <td><span class="tty-badge">{{ concept.tty }}</span></td>
+                                <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View Graph</a></td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </details>
+            {% endif %}
         </div>
     {% endif %}
 {% endblock %}
