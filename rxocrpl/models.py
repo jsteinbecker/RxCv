@@ -2,6 +2,7 @@ from rxocrpl.rxnorm.parser import parse_rxnorm_string, RxNormParts
 import re
 from typing import Any
 
+from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
@@ -588,12 +589,23 @@ class User(models.Model):
             Facility, on_delete=models.CASCADE, related_name="users"
       )
       user_type = models.CharField(max_length=100, null=True, blank=True)
+      auth_user = models.OneToOneField(
+            settings.AUTH_USER_MODEL,
+            on_delete=models.SET_NULL,
+            null=True,
+            blank=True,
+            related_name="facility_profile",
+            help_text="Linked Django auth account",
+      )
 
       class Meta:
             app_label = "rxocrpl"
 
       def __str__ (self):
-            return self.name
+            if self.auth_user_id:
+                  display = self.auth_user.get_full_name() or self.auth_user.username
+                  return f"{display} @ {self.facility}"
+            return f"{self.name} @ {self.facility}"
 
       def has_role (self, role_name: str, facility=None, organization=None) -> bool:
             """
@@ -689,7 +701,8 @@ class RoleGrant(models.Model):
             null=True, blank=True, help_text="Optional, for time-boxed elevated access"
       )
       reason = models.TextField(
-            help_text="Required when granted_by is null (bootstrap case)"
+            blank=True,
+            help_text="Optional. Must be 'system_bootstrap' when granted_by is null.",
       )
 
       class Meta:

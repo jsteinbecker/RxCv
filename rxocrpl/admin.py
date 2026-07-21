@@ -42,7 +42,7 @@ class OrganizationRoleGrantInline(admin.TabularInline):
       extra = 0
       fk_name = "organization"
       readonly_fields = ["granted_at"]
-      fields = ["user", "role", "granted_by", "granted_at", "revoked_at", "expires_at"]
+      fields = ["user", "role", "granted_by", "reason", "granted_at", "revoked_at", "expires_at"]
 
 
 @admin.register(Organization)
@@ -61,15 +61,67 @@ class FacilityRoleGrantInline(admin.TabularInline):
       extra = 0
       fk_name = "facility"
       readonly_fields = ["granted_at"]
-      fields = ["user", "role", "granted_by", "granted_at", "revoked_at", "expires_at"]
+      fields = ["user", "role", "granted_by", "reason", "granted_at", "revoked_at", "expires_at"]
 
 
 @admin.register(Facility)
 class FacilityAdmin(admin.ModelAdmin):
-      list_display = ["name", "organization", "parent", "facility_type"]
+      list_display = ["name", "organization", "parent", "facility_type", "admin_count", "has_admins"]
       list_filter = ["organization", "facility_type"]
       search_fields = ["name"]
       inlines = [UserInline, FacilityRoleGrantInline]
+      actions = ["claim_as_admin"]
+
+      @admin.display(description="Admins", ordering="name")
+      def admin_count (self, obj):
+            return obj.current_admins.count()
+
+      @admin.display(boolean=True, description="Has Admin")
+      def has_admins (self, obj):
+            return obj.current_admins.exists()
+
+      @admin.action(description="Claim selected facilities as admin (bootstrap)")
+      def claim_as_admin (self, request, queryset):
+            claimed, skipped = [], []
+            for facility in queryset:
+                  if facility.current_admins.exists():
+                        skipped.append(f"{facility} (already has admins)")
+                        continue
+                  try:
+                        rx_user = request.user.facility_profile
+                        if rx_user.facility_id != facility.pk:
+                              skipped.append(f"{facility} (you are assigned to a different facility)")
+                              continue
+                  except AttributeError:
+                        rx_user = User.objects.create(
+                              auth_user=request.user,
+                              name=request.user.get_full_name() or request.user.username,
+                              facility=facility,
+                        )
+                  role, _ = Role.objects.get_or_create(
+                        name="facility_admin",
+                        defaults={"description": "Facility administrator"},
+                  )
+                  already = RoleGrant.objects.filter(
+                        user=rx_user, facility=facility, role=role, revoked_at__isnull=True
+                  ).exists()
+                  if already:
+                        claimed.append(f"{facility} (already your facility)")
+                        continue
+                  grant = RoleGrant(
+                        user=rx_user,
+                        role=role,
+                        facility=facility,
+                        granted_by=None,
+                        reason="system_bootstrap",
+                  )
+                  grant.save()
+                  claimed.append(str(facility))
+
+            if claimed:
+                  self.message_user(request, f"Claimed admin for: {', '.join(claimed)}")
+            if skipped:
+                  self.message_user(request, f"Skipped: {', '.join(skipped)}", level=messages.WARNING)
 
 
 class RoleGrantInline(admin.TabularInline):
@@ -82,6 +134,7 @@ class RoleGrantInline(admin.TabularInline):
             "organization",
             "facility",
             "granted_by",
+            "reason",
             "granted_at",
             "revoked_at",
             "expires_at",
@@ -90,15 +143,15 @@ class RoleGrantInline(admin.TabularInline):
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-      list_display = ["name", "facility", "user_type", "is_admin"]
+      list_display = ["name", "auth_user", "facility", "user_type", "is_admin"]
       list_filter = ["facility", "user_type"]
-      search_fields = ["name"]
+      search_fields = ["name", "auth_user__username", "auth_user__email"]
+      raw_id_fields = ["auth_user"]
       inlines = [RoleGrantInline]
 
-      def is_admin(self, obj) -> bool:
+      @admin.display(boolean=True, description="Admin")
+      def is_admin (self, obj) -> bool:
             return obj.is_admin
-
-      is_admin.boolean = True  # ty:ignore[unresolved-attribute]
 
 
 class RoleGrantEventInline(admin.TabularInline):
@@ -107,7 +160,7 @@ class RoleGrantEventInline(admin.TabularInline):
       readonly_fields = ["event_type", "timestamp", "actor", "notes"]
       can_delete = False
 
-      def has_add_permission(self, request, obj=None):
+      def has_add_permission (self, request, obj=None):
             return False
 
 
@@ -127,10 +180,10 @@ class RoleGrantAdmin(admin.ModelAdmin):
       readonly_fields = ["granted_at"]
       inlines = [RoleGrantEventInline]
 
-      def scope(self, obj):
+      def scope (self, obj):
             return obj.organization or obj.facility
 
-      def is_active(self, obj):
+      def is_active (self, obj):
             return obj.is_active
 
       is_active.boolean = True  # ty:ignore[unresolved-attribute]
@@ -142,13 +195,13 @@ class RoleGrantEventAdmin(admin.ModelAdmin):
       list_filter = ["event_type", "timestamp"]
       readonly_fields = ["grant", "event_type", "timestamp", "actor", "notes"]
 
-      def has_add_permission(self, request):
+      def has_add_permission (self, request):
             return False
 
-      def has_change_permission(self, request, obj=None):
+      def has_change_permission (self, request, obj=None):
             return False
 
-      def has_delete_permission(self, request, obj=None):
+      def has_delete_permission (self, request, obj=None):
             return False
 
 
@@ -206,7 +259,7 @@ class ProductAdmin(admin.ModelAdmin):
             "ingredient_count",
       ]
 
-      def get_queryset(self, request):
+      def get_queryset (self, request):
             return super().get_queryset(request).filter(active=True)
 
       fieldsets = (
@@ -230,7 +283,7 @@ class ProductAdmin(admin.ModelAdmin):
       actions = ["enrich_from_outside_sources"]
 
       @admin.action(description="Enrich from Outside Sources")
-      def enrich_from_outside_sources(self, request, queryset):
+      def enrich_from_outside_sources (self, request, queryset):
             succeeded = 0
             failed = []
             for product in queryset:
@@ -251,10 +304,10 @@ class ProductAdmin(admin.ModelAdmin):
                         level=messages.ERROR,
                   )
 
-      def view_on_site(self, obj):
+      def view_on_site (self, obj):
             return reverse("rxocrpl:ndc_product_detail", args=[obj.product_ndc])
 
-      def get_urls(self):
+      def get_urls (self):
             from django.urls import path
 
             urls = super().get_urls()
@@ -267,7 +320,7 @@ class ProductAdmin(admin.ModelAdmin):
             ]
             return custom_urls + urls
 
-      def sync_view(self, request, object_id):
+      def sync_view (self, request, object_id):
             from django.shortcuts import redirect
 
             obj = self.get_object(request, object_id)
@@ -276,7 +329,7 @@ class ProductAdmin(admin.ModelAdmin):
                   self.message_user(request, f"Successfully enriched {obj.product_ndc}")
             return redirect("admin:rxocrpl_product_change", object_id)
 
-      def sync_button(self, obj):
+      def sync_button (self, obj):
             from django.utils.html import format_html
 
             if obj.pk:
@@ -289,11 +342,11 @@ class ProductAdmin(admin.ModelAdmin):
       sync_button.short_description = "Sync"  # ty:ignore[unresolved-attribute]
 
       @staticmethod
-      def ingredient_count(obj):
+      def ingredient_count (obj):
             return obj.listedingredient_set.count()
 
       @staticmethod
-      def package_count(obj):
+      def package_count (obj):
             return obj.packagedproduct_set.count()
 
 
@@ -307,7 +360,7 @@ class PackagedProductAdmin(admin.ModelAdmin):
             "package_ndc",
       ]
 
-      def get_queryset(self, request):
+      def get_queryset (self, request):
             return super().get_queryset(request).filter(active=True)
 
 
@@ -317,7 +370,7 @@ class ListedIngredientAdmin(admin.ModelAdmin):
       search_fields = ["product__brand_name", "product__generic_name"]
       readonly_fields = ["product"]
 
-      def get_queryset(self, request):
+      def get_queryset (self, request):
             return super().get_queryset(request).filter(product__active=True)
 
 
@@ -347,18 +400,18 @@ class LabelerAdmin(admin.ModelAdmin):
       list_display = ["verbose_name", "labeler_code", "name", "product_count"]
       search_fields = ["verbose_name", "labeler_code", "name"]
       list_filter = ["active"]
-      sortable_by = ["verbose_name", "labeler_code", "name"]
+      sortable_by = ["verbose_name", "labeler_code", "name", "product_count"]
 
       inlines = [InlineProducts]
 
-      def view_on_site(self, obj):
+      def view_on_site (self, obj):
             return reverse("rxocrpl:labeler_detail", args=[obj.labeler_code])
 
-      def get_queryset(self, request):
+      def get_queryset (self, request):
             return super().get_queryset(request).filter(active=True)
 
       @staticmethod
-      def product_count(obj):
+      def product_count (obj):
             return obj.product_set.count()
 
 
@@ -369,5 +422,5 @@ class RxNormConceptAdmin(admin.ModelAdmin):
       list_filter = ["tty"]
       sortable_by = ["rxcui", "name", "tty"]
 
-      def view_on_site(self, obj):
+      def view_on_site (self, obj):
             return reverse("rxocrpl:concept_graph", args=[obj.rxcui])

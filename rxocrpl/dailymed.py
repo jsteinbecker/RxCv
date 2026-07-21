@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 import requests
 
-__all__ = ["get_dailymed_url", "product_ndc_candidates"]
+__all__ = ["find_setid", "get_dailymed_url", "product_ndc_candidates"]
 
 _SITE_URL = "https://dailymed.nlm.nih.gov/dailymed"
 _API_URL = f"{_SITE_URL}/services/v2"
@@ -64,7 +64,7 @@ def product_ndc_candidates(ndc: str) -> list[str]:
     return []
 
 
-def _find_setid(product_ndc: str) -> str | None:
+def find_setid(product_ndc: str) -> str | None:
     """Look up the DailyMed SPL setid for a product-level *product_ndc*."""
     try:
         response = _session.get(
@@ -91,7 +91,7 @@ def get_dailymed_url(ndc: str) -> str:
     """
     candidates = product_ndc_candidates(ndc)
     for candidate in candidates:
-        setid = _find_setid(candidate)
+        setid = find_setid(candidate)
         if setid:
             return f"{_SITE_URL}/drugInfo.cfm?setid={setid}"
 

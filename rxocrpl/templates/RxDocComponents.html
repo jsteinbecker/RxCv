@@ -1,448 +1,550 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RxDoc · Component Library</title>
-<link rel="stylesheet" href="rxcv-base.css" />
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/lucide@0.469.0"></script>
-<script src="components/rxcv-fixtures.js"></script>
-<script type="text/babel" src="components/OCRComponents.jsx"></script>
-<script type="text/babel" src="components/PipelineComponents.jsx"></script>
-<script type="text/babel" src="components/FormComponents.jsx"></script>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>RxDoc · Component Library</title>
+    <link rel="stylesheet" href="rxcv-base.css"/>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"
+            integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L"
+            crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"
+            integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm"
+            crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"
+            integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y"
+            crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/lucide@0.469.0"></script>
+    <script src="components/rxcv-fixtures.js"></script>
+    <script type="text/babel" src="components/OCRComponents.jsx"></script>
+    <script type="text/babel" src="components/PipelineComponents.jsx"></script>
+    <script type="text/babel" src="components/FormComponents.jsx"></script>
 
-<style>
-  html, body, #root { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-  .demo-toggle { height: 27px; padding: 0 10px; border-radius: 2px; font-size: 11px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-default); font-family: var(--font-sans); transition: background 80ms, color 80ms; }
-  .demo-toggle.active { background: var(--brand); color: white; border-color: var(--brand); font-weight: 600; }
-  .demo-toggle:not(.active) { background: var(--bg-surface); color: var(--fg-secondary); }
-</style>
+    <style>
+        html, body, #root {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .demo-toggle {
+            height: 27px;
+            padding: 0 10px;
+            border-radius: 2px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid var(--border-default);
+            font-family: var(--font-sans);
+            transition: background 80ms, color 80ms;
+        }
+
+        .demo-toggle.active {
+            background: var(--brand);
+            color: white;
+            border-color: var(--brand);
+            font-weight: 600;
+        }
+
+        .demo-toggle:not(.active) {
+            background: var(--bg-surface);
+            color: var(--fg-secondary);
+        }
+    </style>
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel">
 
-// ─── Utility ─────────────────────────────────────────────────────────────────
-const Toggle = ({ label, active, onClick }) => (
-  <button className={`demo-toggle ${active ? 'active' : ''}`} onClick={onClick}>{label}</button>
-);
+    // ─── Utility ─────────────────────────────────────────────────────────────────
+    const Toggle = ({label, active, onClick}) => (
+        <button className={`demo-toggle ${active ? 'active' : ''}`} onClick={onClick}>{label}</button>
+    );
 
-const StateBar = ({ children }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>{children}</div>
-);
+    const StateBar = ({children}) => (
+        <div
+            style=" display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 ">{children}</div>
+    );
 
-const DemoNote = ({ children }) => (
-  <div style={{ fontSize: 11, color: 'var(--fg-muted)', padding: '6px 10px', background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', borderRadius: 2, marginBottom: 10 }}>{children}</div>
-);
+    const DemoNote = ({children}) => (
+        <div
+            style=" fontSize: 11, color: 'var(--fg-muted)', padding: '6px 10px', background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', borderRadius: 2, marginBottom: 10 ">{children}</div>
+    );
 
-// ─── OCR Demos ────────────────────────────────────────────────────────────────
-const OCRFieldsTableDemo = () => {
-  const [di, setDi] = React.useState(0);
-  const [showSrc, setShowSrc] = React.useState(true);
-  const [showBcode, setShowBcode] = React.useState(true);
-  const VARIANTS = [
-    { di: 0, label: 'High confidence' },
-    { di: 1, label: 'With brand enrichment' },
-    { di: 2, label: 'Needs review' },
-    { di: 3, label: 'Sparse / OOI' },
-  ];
-  return (
-    <div>
-      <StateBar>
-        {VARIANTS.map(v => <Toggle key={v.di} label={v.label} active={di === v.di} onClick={() => setDi(v.di)} />)}
-        <div style={{ flex: 1 }} />
-        <Toggle label={showSrc ? 'Sources on' : 'Sources off'} active={showSrc} onClick={() => setShowSrc(!showSrc)} />
-        <Toggle label={showBcode ? 'Barcode on' : 'Barcode off'} active={showBcode} onClick={() => setShowBcode(!showBcode)} />
-      </StateBar>
-      <DemoNote>Click any field value to inline-edit. Confidence is regex_prior × variant_agreement from the OCR ensemble.</DemoNote>
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 4, padding: '14px 16px', boxShadow: 'var(--shadow-1)' }}>
-        <OCRFieldsTable fields={PIPELINE_FIXTURES.detections[di].fields} showSources={showSrc} showBarcode={showBcode} />
-      </div>
-    </div>
-  );
-};
+    // ─── OCR Demos ────────────────────────────────────────────────────────────────
+    const OCRFieldsTableDemo = () => {
+        const [di, setDi] = React.useState(0);
+        const [showSrc, setShowSrc] = React.useState(true);
+        const [showBcode, setShowBcode] = React.useState(true);
+        const VARIANTS = [
+            {di: 0, label: 'High confidence'},
+            {di: 1, label: 'With brand enrichment'},
+            {di: 2, label: 'Needs review'},
+            {di: 3, label: 'Sparse / OOI'},
+        ];
+        return (
+            <div>
+                <StateBar>
+                    {VARIANTS.map(v => <Toggle key={v.di} label={v.label} active={di === v.di}
+                                               onClick={() => setDi(v.di)}/>)}
+                    <div style=" flex: 1 "/>
+                    <Toggle label={showSrc ? 'Sources on' : 'Sources off'} active={showSrc}
+                            onClick={() => setShowSrc(!showSrc)}/>
+                    <Toggle label={showBcode ? 'Barcode on' : 'Barcode off'} active={showBcode}
+                            onClick={() => setShowBcode(!showBcode)}/>
+                </StateBar>
+                <DemoNote>Click any field value to inline-edit. Confidence is regex_prior × variant_agreement from the
+                    OCR ensemble.</DemoNote>
+                <div
+                    style=" background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 4, padding: '14px 16px', boxShadow: 'var(--shadow-1)' ">
+                    <OCRFieldsTable fields={PIPELINE_FIXTURES.detections[di].fields} showSources={showSrc}
+                                    showBarcode={showBcode}/>
+                </div>
+            </div>
+        );
+    };
 
-const OCRReviewAlertDemo = () => {
-  const [mode, setMode] = React.useState('single');
-  const singleFields = { mfg: { value: 'Pfizer Injectables', conf: 0.35, source: 'extract_mfg:directory' } };
-  const multiFields = {
-    mfg: { value: 'Pfizer Injectables', conf: 0.31, source: 'extract_mfg:directory' },
-    lot: { value: 'FK240901', conf: 0.30, source: 'extract_lot:bare_alnum' },
-    ndc: { value: '0009-0224-20', conf: 0.25, source: 'extract_ndc:run' },
-  };
-  const okFields = { ndc: { value: '0264-7800-10', conf: 0.96, source: 'extract_ndc:segmented' } };
-  return (
-    <div>
-      <StateBar>
-        <Toggle label="1 flagged field" active={mode === 'single'} onClick={() => setMode('single')} />
-        <Toggle label="3 flagged fields" active={mode === 'multi'} onClick={() => setMode('multi')} />
-        <Toggle label="All confident (no alert)" active={mode === 'ok'} onClick={() => setMode('ok')} />
-      </StateBar>
-      <DemoNote>Surfaces when any populated OCRField has confidence below the review threshold (default 0.40). Threshold = regex_prior × variant_agreement.</DemoNote>
-      {mode === 'ok'
-        ? <div style={{ padding: '12px 14px', background: 'var(--success-bg)', border: '1px solid var(--tier-identity-border)', borderRadius: 4, fontSize: 12, color: 'var(--success)', fontWeight: 500 }}>
-            No low-confidence fields — no alert shown.
-          </div>
-        : <OCRReviewAlert fields={mode === 'single' ? singleFields : multiFields} threshold={0.40} />
-      }
-    </div>
-  );
-};
+    const OCRReviewAlertDemo = () => {
+        const [mode, setMode] = React.useState('single');
+        const singleFields = {mfg: {value: 'Pfizer Injectables', conf: 0.35, source: 'extract_mfg:directory'}};
+        const multiFields = {
+            mfg: {value: 'Pfizer Injectables', conf: 0.31, source: 'extract_mfg:directory'},
+            lot: {value: 'FK240901', conf: 0.30, source: 'extract_lot:bare_alnum'},
+            ndc: {value: '0009-0224-20', conf: 0.25, source: 'extract_ndc:run'},
+        };
+        const okFields = {ndc: {value: '0264-7800-10', conf: 0.96, source: 'extract_ndc:segmented'}};
+        return (
+            <div>
+                <StateBar>
+                    <Toggle label="1 flagged field" active={mode === 'single'} onClick={() => setMode('single')}/>
+                    <Toggle label="3 flagged fields" active={mode === 'multi'} onClick={() => setMode('multi')}/>
+                    <Toggle label="All confident (no alert)" active={mode === 'ok'} onClick={() => setMode('ok')}/>
+                </StateBar>
+                <DemoNote>Surfaces when any populated OCRField has confidence below the review threshold (default 0.40).
+                    Threshold = regex_prior × variant_agreement.</DemoNote>
+                {mode === 'ok'
+                    ? <div
+                        style=" padding: '12px 14px', background: 'var(--success-bg)', border: '1px solid var(--tier-identity-border)', borderRadius: 4, fontSize: 12, color: 'var(--success)', fontWeight: 500 ">
+                        No low-confidence fields — no alert shown.
+                    </div>
+                    : <OCRReviewAlert fields={mode === 'single' ? singleFields : multiFields} threshold={0.40}/>
+                }
+            </div>
+        );
+    };
 
-const FieldSourceTagDemo = () => {
-  const sources = [
-    ['extract_ndc:segmented',     'Segmented NDC pattern match'],
-    ['extract_ndc:run',           'Bare digit-run NDC'],
-    ['extract_lot:labeled',       'Labeled LOT/BATCH/BN'],
-    ['extract_lot:bare_alnum',    'Unlabeled alphanumeric lot'],
-    ['extract_exp:MM/YY',         'Expiration date MM/YY'],
-    ['extract_exp:MM/DD/YYYY',    'Expiration date MM/DD/YYYY'],
-    ['extract_strength',          'Strength regex (g/mg/mEq/%)'],
-    ['extract_vol_ml',            'Volume in mL'],
-    ['extract_mdv',               'MDV/SDV keyword'],
-    ['extract_mfg:directory',     'Manufacturer from OCR + directory'],
-    ['extract_product:directory', 'Product via FDA labeler lookup'],
-    ['ndc_db_enrichment:brand',   'Brand filled from FDA NDC DB'],
-    ['ndc_db_enrichment:mfg',     'Manufacturer from FDA NDC DB'],
-    ['ndc_db_enrichment:product', 'Generic name from FDA NDC DB'],
-    ['ndc_db_enrichment:strength','Strength from FDA NDC DB'],
-    ['labeler_json:mfg',          'Manufacturer from labeler.json'],
-    ['barcode:GS1-128',           'GS1-128 barcode decode (pyzbar)'],
-    ['extract_instructions:for intravenous use only', 'Instruction keyword match'],
-  ];
-  return (
-    <div>
-      <DemoNote>Tags surface the extractor source for each OCR field. Color encodes source kind: blue = OCR regex, gray = database lookup, green = barcode scan.</DemoNote>
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 4, overflow: 'hidden', boxShadow: 'var(--shadow-1)' }}>
-        {sources.map(([src, note], i) => (
-          <div key={src} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: i < sources.length - 1 ? '1px solid var(--border-subtle)' : 'none', background: i % 2 === 0 ? 'transparent' : 'var(--bg-app)' }}>
-            <FieldSourceTag source={src} />
-            <span style={{ fontSize: 11, color: 'var(--fg-tertiary)' }}>{note}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+    const FieldSourceTagDemo = () => {
+        const sources = [
+            ['extract_ndc:segmented', 'Segmented NDC pattern match'],
+            ['extract_ndc:run', 'Bare digit-run NDC'],
+            ['extract_lot:labeled', 'Labeled LOT/BATCH/BN'],
+            ['extract_lot:bare_alnum', 'Unlabeled alphanumeric lot'],
+            ['extract_exp:MM/YY', 'Expiration date MM/YY'],
+            ['extract_exp:MM/DD/YYYY', 'Expiration date MM/DD/YYYY'],
+            ['extract_strength', 'Strength regex (g/mg/mEq/%)'],
+            ['extract_vol_ml', 'Volume in mL'],
+            ['extract_mdv', 'MDV/SDV keyword'],
+            ['extract_mfg:directory', 'Manufacturer from OCR + directory'],
+            ['extract_product:directory', 'Product via FDA labeler lookup'],
+            ['ndc_db_enrichment:brand', 'Brand filled from FDA NDC DB'],
+            ['ndc_db_enrichment:mfg', 'Manufacturer from FDA NDC DB'],
+            ['ndc_db_enrichment:product', 'Generic name from FDA NDC DB'],
+            ['ndc_db_enrichment:strength', 'Strength from FDA NDC DB'],
+            ['labeler_json:mfg', 'Manufacturer from labeler.json'],
+            ['barcode:GS1-128', 'GS1-128 barcode decode (pyzbar)'],
+            ['extract_instructions:for intravenous use only', 'Instruction keyword match'],
+        ];
+        return (
+            <div>
+                <DemoNote>Tags surface the extractor source for each OCR field. Color encodes source kind: blue = OCR
+                    regex, gray = database lookup, green = barcode scan.</DemoNote>
+                <div
+                    style=" background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 4, overflow: 'hidden', boxShadow: 'var(--shadow-1)' ">
+                    {sources.map(([src, note], i) => (
+                        <div key={src}
+                             style=" display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: i < sources.length - 1 ? '1px solid var(--border-subtle)' : 'none', background: i % 2 === 0 ? 'transparent' : 'var(--bg-app)' ">
+                            <FieldSourceTag source={src}/>
+                            <span style=" fontSize: 11, color: 'var(--fg-tertiary)' ">{note}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
-const BarcodeNDCPanelDemo = () => {
-  const [mode, setMode] = React.useState('match');
-  const states = {
-    match:    { barcodeNDC: '0264-7800-10', ocrNDC: '0264-7800-10', barcodeConf: 0.99, ocrConf: 0.96 },
-    mismatch: { barcodeNDC: '0264-7800-10', ocrNDC: '0264-7800-12', barcodeConf: 0.99, ocrConf: 0.71 },
-    nobarcode:{ barcodeNDC: null,           ocrNDC: '0264-7800-10', barcodeConf: 0,    ocrConf: 0.88 },
-    noocr:    { barcodeNDC: '0264-7800-10', ocrNDC: null,           barcodeConf: 0.99, ocrConf: 0 },
-  };
-  return (
-    <div>
-      <StateBar>
-        <Toggle label="Match" active={mode === 'match'} onClick={() => setMode('match')} />
-        <Toggle label="Mismatch" active={mode === 'mismatch'} onClick={() => setMode('mismatch')} />
-        <Toggle label="No barcode" active={mode === 'nobarcode'} onClick={() => setMode('nobarcode')} />
-        <Toggle label="No OCR NDC" active={mode === 'noocr'} onClick={() => setMode('noocr')} />
-      </StateBar>
-      <DemoNote>Shown when barcode_ndc is present. Barcode value is always preferred (conf ≥ 0.99) over OCR-inferred NDC when both are available.</DemoNote>
-      <BarcodeNDCPanel {...states[mode]} />
-    </div>
-  );
-};
+    const BarcodeNDCPanelDemo = () => {
+        const [mode, setMode] = React.useState('match');
+        const states = {
+            match: {barcodeNDC: '0264-7800-10', ocrNDC: '0264-7800-10', barcodeConf: 0.99, ocrConf: 0.96},
+            mismatch: {barcodeNDC: '0264-7800-10', ocrNDC: '0264-7800-12', barcodeConf: 0.99, ocrConf: 0.71},
+            nobarcode: {barcodeNDC: null, ocrNDC: '0264-7800-10', barcodeConf: 0, ocrConf: 0.88},
+            noocr: {barcodeNDC: '0264-7800-10', ocrNDC: null, barcodeConf: 0.99, ocrConf: 0},
+        };
+        return (
+            <div>
+                <StateBar>
+                    <Toggle label="Match" active={mode === 'match'} onClick={() => setMode('match')}/>
+                    <Toggle label="Mismatch" active={mode === 'mismatch'} onClick={() => setMode('mismatch')}/>
+                    <Toggle label="No barcode" active={mode === 'nobarcode'} onClick={() => setMode('nobarcode')}/>
+                    <Toggle label="No OCR NDC" active={mode === 'noocr'} onClick={() => setMode('noocr')}/>
+                </StateBar>
+                <DemoNote>Shown when barcode_ndc is present. Barcode value is always preferred (conf ≥ 0.99) over
+                    OCR-inferred NDC when both are available.</DemoNote>
+                <BarcodeNDCPanel {...states[mode]} />
+            </div>
+        );
+    };
 
-// ─── Pipeline Demos ───────────────────────────────────────────────────────────
-const PipelineRunTimelineDemo = () => {
-  const [status, setStatus] = React.useState('succeeded');
-  const [cert, setCert]     = React.useState(false);
-  const baseRun = PIPELINE_FIXTURES.pipelineRun;
+    // ─── Pipeline Demos ───────────────────────────────────────────────────────────
+    const PipelineRunTimelineDemo = () => {
+        const [status, setStatus] = React.useState('succeeded');
+        const [cert, setCert] = React.useState(false);
+        const baseRun = PIPELINE_FIXTURES.pipelineRun;
 
-  const runVariants = {
-    succeeded: { ...baseRun, status: 'succeeded', certified_subset: cert },
-    running: {
-      ...baseRun, status: 'running', certified_subset: cert,
-      stages: baseRun.stages.map((s, i) => ({ ...s, status: i < 3 ? 'done' : i === 3 ? 'running' : 'pending', duration_s: i < 3 ? s.duration_s : i === 3 ? 0 : 0 })),
-    },
-    failed: {
-      ...baseRun, status: 'failed', certified_subset: cert,
-      stages: baseRun.stages.map((s, i) => ({ ...s, status: i < 2 ? 'done' : i === 2 ? 'error' : 'pending', duration_s: i < 2 ? s.duration_s : i === 2 ? 0.4 : 0 })),
-    },
-  };
+        const runVariants = {
+            succeeded: {...baseRun, status: 'succeeded', certified_subset: cert},
+            running: {
+                ...baseRun, status: 'running', certified_subset: cert,
+                stages: baseRun.stages.map((s, i) => ({
+                    ...s,
+                    status: i < 3 ? 'done' : i === 3 ? 'running' : 'pending',
+                    duration_s: i < 3 ? s.duration_s : i === 3 ? 0 : 0
+                })),
+            },
+            failed: {
+                ...baseRun, status: 'failed', certified_subset: cert,
+                stages: baseRun.stages.map((s, i) => ({
+                    ...s,
+                    status: i < 2 ? 'done' : i === 2 ? 'error' : 'pending',
+                    duration_s: i < 2 ? s.duration_s : i === 2 ? 0.4 : 0
+                })),
+            },
+        };
 
-  return (
-    <div>
-      <StateBar>
-        <Toggle label="Succeeded" active={status === 'succeeded'} onClick={() => setStatus('succeeded')} />
-        <Toggle label="Running (OCR stage)" active={status === 'running'} onClick={() => setStatus('running')} />
-        <Toggle label="Failed (OCR stage)" active={status === 'failed'} onClick={() => setStatus('failed')} />
-        <div style={{ flex: 1 }} />
-        <Toggle label={cert ? 'Certified subset' : 'Standard mode'} active={cert} onClick={() => setCert(!cert)} />
-      </StateBar>
-      <DemoNote>Expandable stage rows show detail text. Timing bar reflects proportion of total run time. Click any stage row to expand.</DemoNote>
-      <PipelineRunTimeline run={runVariants[status]} />
-    </div>
-  );
-};
+        return (
+            <div>
+                <StateBar>
+                    <Toggle label="Succeeded" active={status === 'succeeded'} onClick={() => setStatus('succeeded')}/>
+                    <Toggle label="Running (OCR stage)" active={status === 'running'}
+                            onClick={() => setStatus('running')}/>
+                    <Toggle label="Failed (OCR stage)" active={status === 'failed'}
+                            onClick={() => setStatus('failed')}/>
+                    <div style=" flex: 1 "/>
+                    <Toggle label={cert ? 'Certified subset' : 'Standard mode'} active={cert}
+                            onClick={() => setCert(!cert)}/>
+                </StateBar>
+                <DemoNote>Expandable stage rows show detail text. Timing bar reflects proportion of total run time.
+                    Click any stage row to expand.</DemoNote>
+                <PipelineRunTimeline run={runVariants[status]}/>
+            </div>
+        );
+    };
 
-const DetectionSummaryCardDemo = () => {
-  const [expanded, setExpanded] = React.useState(null);
-  const dets = PIPELINE_FIXTURES.detections;
-  const LABELS = ['High conf · matched', 'With brand enrichment', 'Low conf · needs review', 'Out of inventory'];
-  return (
-    <div>
-      <StateBar>
-        <span style={{ fontSize: 11, color: 'var(--fg-tertiary)' }}>All 4 detections from the run. Click any card to expand.</span>
-        <div style={{ flex: 1 }} />
-        <button className="demo-toggle" onClick={() => setExpanded(null)}>Collapse all</button>
-      </StateBar>
-      <DemoNote>Expandable cards. The quick-strip shows the 5 most important OCR fields at a glance; expanding reveals the full OCRFieldsTable with source tags.</DemoNote>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {dets.map((det, i) => (
-          <div key={i}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{LABELS[i]}</div>
-            <DetectionSummaryCard detection={det} startExpanded={expanded === i} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+    const DetectionSummaryCardDemo = () => {
+        const [expanded, setExpanded] = React.useState(null);
+        const dets = PIPELINE_FIXTURES.detections;
+        const LABELS = ['High conf · matched', 'With brand enrichment', 'Low conf · needs review', 'Out of inventory'];
+        return (
+            <div>
+                <StateBar>
+                    <span style=" fontSize: 11, color: 'var(--fg-tertiary)' ">All 4 detections from the run. Click any card to expand.</span>
+                    <div style=" flex: 1 "/>
+                    <button className="demo-toggle" onClick={() => setExpanded(null)}>Collapse all</button>
+                </StateBar>
+                <DemoNote>Expandable cards. The quick-strip shows the 5 most important OCR fields at a glance; expanding
+                    reveals the full OCRFieldsTable with source tags.</DemoNote>
+                <div style=" display: 'flex', flexDirection: 'column', gap: 6 ">
+                    {dets.map((det, i) => (
+                        <div key={i}>
+                            <div
+                                style=" fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 ">{LABELS[i]}</div>
+                            <DetectionSummaryCard detection={det} startExpanded={expanded === i}/>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
-const CleanupAuditPanelDemo = () => {
-  const [mode, setMode] = React.useState('nms');
-  const cleanupVariants = {
-    clean:   { nms_merges: [], frame_rejects: [], reflection_rejects: [] },
-    nms:     PIPELINE_FIXTURES.pipelineRun.cleanup,
-    frame:   { nms_merges: [], frame_rejects: [{ instance_id: 0, coverage_pct: 94 }], reflection_rejects: [] },
-    reflect: { nms_merges: [], frame_rejects: [], reflection_rejects: [{ instance_id: 2 }] },
-    all:     { nms_merges: PIPELINE_FIXTURES.pipelineRun.cleanup.nms_merges, frame_rejects: [{ instance_id: 0, coverage_pct: 94 }], reflection_rejects: [{ instance_id: 2 }] },
-  };
-  return (
-    <div>
-      <StateBar>
-        <Toggle label="No rejects (clean)" active={mode === 'clean'} onClick={() => setMode('clean')} />
-        <Toggle label="NMS merge" active={mode === 'nms'} onClick={() => setMode('nms')} />
-        <Toggle label="Frame reject" active={mode === 'frame'} onClick={() => setMode('frame')} />
-        <Toggle label="Reflection reject" active={mode === 'reflect'} onClick={() => setMode('reflect')} />
-        <Toggle label="All" active={mode === 'all'} onClick={() => setMode('all')} />
-      </StateBar>
-      <DemoNote>Cleanup runs before OCR. NMS = non-maximum suppression of overlapping boxes; frame = detection spanning the full image edge; reflection = mirror artifact detection.</DemoNote>
-      <CleanupAuditPanel cleanup={cleanupVariants[mode]} />
-    </div>
-  );
-};
+    const CleanupAuditPanelDemo = () => {
+        const [mode, setMode] = React.useState('nms');
+        const cleanupVariants = {
+            clean: {nms_merges: [], frame_rejects: [], reflection_rejects: []},
+            nms: PIPELINE_FIXTURES.pipelineRun.cleanup,
+            frame: {nms_merges: [], frame_rejects: [{instance_id: 0, coverage_pct: 94}], reflection_rejects: []},
+            reflect: {nms_merges: [], frame_rejects: [], reflection_rejects: [{instance_id: 2}]},
+            all: {
+                nms_merges: PIPELINE_FIXTURES.pipelineRun.cleanup.nms_merges,
+                frame_rejects: [{instance_id: 0, coverage_pct: 94}],
+                reflection_rejects: [{instance_id: 2}]
+            },
+        };
+        return (
+            <div>
+                <StateBar>
+                    <Toggle label="No rejects (clean)" active={mode === 'clean'} onClick={() => setMode('clean')}/>
+                    <Toggle label="NMS merge" active={mode === 'nms'} onClick={() => setMode('nms')}/>
+                    <Toggle label="Frame reject" active={mode === 'frame'} onClick={() => setMode('frame')}/>
+                    <Toggle label="Reflection reject" active={mode === 'reflect'} onClick={() => setMode('reflect')}/>
+                    <Toggle label="All" active={mode === 'all'} onClick={() => setMode('all')}/>
+                </StateBar>
+                <DemoNote>Cleanup runs before OCR. NMS = non-maximum suppression of overlapping boxes; frame = detection
+                    spanning the full image edge; reflection = mirror artifact detection.</DemoNote>
+                <CleanupAuditPanel cleanup={cleanupVariants[mode]}/>
+            </div>
+        );
+    };
 
-const NDCEnrichmentPanelDemo = () => {
-  const [di, setDi] = React.useState(0);
-  const det = PIPELINE_FIXTURES.detections[di];
-  return (
-    <div>
-      <StateBar>
-        {PIPELINE_FIXTURES.detections.map((d, i) => (
-          <Toggle key={i} label={`Detection ${i}${d.enrichment ? '' : ' (no NDC)'}`} active={di === i} onClick={() => setDi(i)} />
-        ))}
-      </StateBar>
-      <DemoNote>Filled from the FDA NDC Directory CSV after OCR. Fields already extracted by OCR are never overwritten — DB values are only used to fill blanks.</DemoNote>
-      <NDCEnrichmentPanel enrichment={det.enrichment} ndc={det.fields.ndc?.value} />
-    </div>
-  );
-};
+    const NDCEnrichmentPanelDemo = () => {
+        const [di, setDi] = React.useState(0);
+        const det = PIPELINE_FIXTURES.detections[di];
+        return (
+            <div>
+                <StateBar>
+                    {PIPELINE_FIXTURES.detections.map((d, i) => (
+                        <Toggle key={i} label={`Detection ${i}${d.enrichment ? '' : ' (no NDC)'}`} active={di === i}
+                                onClick={() => setDi(i)}/>
+                    ))}
+                </StateBar>
+                <DemoNote>Filled from the FDA NDC Directory CSV after OCR. Fields already extracted by OCR are never
+                    overwritten — DB values are only used to fill blanks.</DemoNote>
+                <NDCEnrichmentPanel enrichment={det.enrichment} ndc={det.fields.ndc?.value}/>
+            </div>
+        );
+    };
 
-// ─── Form Demos ───────────────────────────────────────────────────────────────
-const NewCaptureFormDemo = () => (
-  <div>
-    <DemoNote>3-step capture form. Step 1: order text, expected components (--expect hints), pre-scanned barcodes. Step 2: image slots. Step 3: review + certified_subset toggle.</DemoNote>
-    <NewCaptureForm />
-  </div>
-);
+    // ─── Form Demos ───────────────────────────────────────────────────────────────
+    const NewCaptureFormDemo = () => (
+        <div>
+            <DemoNote>3-step capture form. Step 1: order text, expected components (--expect hints), pre-scanned
+                barcodes. Step 2: image slots. Step 3: review + certified_subset toggle.</DemoNote>
+            <NewCaptureForm/>
+        </div>
+    );
 
-const OCRCorrectionFormDemo = () => {
-  const FIELDS = [
-    { key: 'ndc', label: 'NDC — OCR misread digit', field: PIPELINE_FIXTURES.detections[0].fields.ndc },
-    { key: 'lot', label: 'Lot — bare unlabeled', field: PIPELINE_FIXTURES.detections[3].fields.lot },
-    { key: 'mfg', label: 'Mfg — low confidence', field: PIPELINE_FIXTURES.detections[2].fields.mfg },
-    { key: 'exp', label: 'Exp — wrong format', field: PIPELINE_FIXTURES.detections[0].fields.exp },
-  ];
-  const [fi, setFi] = React.useState(0);
-  return (
-    <div>
-      <StateBar>
-        {FIELDS.map((f, i) => <Toggle key={i} label={f.label} active={fi === i} onClick={() => setFi(i)} />)}
-      </StateBar>
-      <DemoNote>Inline correction form surfaced when a tech or RPh disagrees with an OCR value. Correction + reason are appended to the audit trail.</DemoNote>
-      <OCRCorrectionForm fieldKey={FIELDS[fi].key} field={FIELDS[fi].field} />
-    </div>
-  );
-};
+    const OCRCorrectionFormDemo = () => {
+        const FIELDS = [
+            {key: 'ndc', label: 'NDC — OCR misread digit', field: PIPELINE_FIXTURES.detections[0].fields.ndc},
+            {key: 'lot', label: 'Lot — bare unlabeled', field: PIPELINE_FIXTURES.detections[3].fields.lot},
+            {key: 'mfg', label: 'Mfg — low confidence', field: PIPELINE_FIXTURES.detections[2].fields.mfg},
+            {key: 'exp', label: 'Exp — wrong format', field: PIPELINE_FIXTURES.detections[0].fields.exp},
+        ];
+        const [fi, setFi] = React.useState(0);
+        return (
+            <div>
+                <StateBar>
+                    {FIELDS.map((f, i) => <Toggle key={i} label={f.label} active={fi === i} onClick={() => setFi(i)}/>)}
+                </StateBar>
+                <DemoNote>Inline correction form surfaced when a tech or RPh disagrees with an OCR value. Correction +
+                    reason are appended to the audit trail.</DemoNote>
+                <OCRCorrectionForm fieldKey={FIELDS[fi].key} field={FIELDS[fi].field}/>
+            </div>
+        );
+    };
 
-const CertifySubsetModalDemo = () => {
-  const [done, setDone] = React.useState(false);
-  return (
-    <div>
-      <DemoNote>
-        Shown before running the pipeline when certified_subset_in_inventory=True. Bypasses the matcher's score threshold — Hungarian assignment is trusted regardless of OCR confidence.
-      </DemoNote>
-      {done
-        ? <div style={{ padding: '20px 16px', textAlign: 'center', background: 'var(--warning-bg)', border: '1px solid var(--tier-therapeutic-border)', borderRadius: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--warning)', marginBottom: 6 }}>Certified — pipeline running in force-assign mode</div>
-            <button className="demo-toggle" onClick={() => setDone(false)}>Reset demo</button>
-          </div>
-        : <CertifySubsetModal user={PIPELINE_FIXTURES.user} onConfirm={() => setDone(true)} onCancel={() => {}} />
-      }
-    </div>
-  );
-};
+    const CertifySubsetModalDemo = () => {
+        const [done, setDone] = React.useState(false);
+        return (
+            <div>
+                <DemoNote>
+                    Shown before running the pipeline when certified_subset_in_inventory=True. Bypasses the matcher's
+                    score threshold — Hungarian assignment is trusted regardless of OCR confidence.
+                </DemoNote>
+                {done
+                    ? <div
+                        style=" padding: '20px 16px', textAlign: 'center', background: 'var(--warning-bg)', border: '1px solid var(--tier-therapeutic-border)', borderRadius: 4 ">
+                        <div style=" fontSize: 13, fontWeight: 600, color: 'var(--warning)', marginBottom: 6 ">Certified
+                            — pipeline running in force-assign mode
+                        </div>
+                        <button className="demo-toggle" onClick={() => setDone(false)}>Reset demo</button>
+                    </div>
+                    :
+                    <CertifySubsetModal user={PIPELINE_FIXTURES.user} onConfirm={() => setDone(true)} onCancel={() => {
+                        " />
+                    }
+                        </div>
+                        );
+                    };
 
-const RejectComponentFormDemo = () => {
-  const [di, setDi] = React.useState(1);
-  const [done, setDone] = React.useState(false);
-  return (
-    <div>
-      <StateBar>
-        {PIPELINE_FIXTURES.detections.map((d, i) => (
-          <Toggle key={i} label={`${d.source_image}#${d.instance_id} · ${d.class_label}`} active={di === i} onClick={() => { setDi(i); setDone(false); }} />
-        ))}
-      </StateBar>
-      <DemoNote>RPh surfaces this form when a component match is incorrect. Reason is required; rejection is immutable and logged to the audit trail.</DemoNote>
-      {done
-        ? <div style={{ padding: '20px 16px', textAlign: 'center', background: 'var(--danger-bg)', border: '1px solid #e8bbb6', borderRadius: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)', marginBottom: 6 }}>Rejection recorded — compound flagged</div>
-            <button className="demo-toggle" onClick={() => setDone(false)}>Reset demo</button>
-          </div>
-        : <RejectComponentForm detection={PIPELINE_FIXTURES.detections[di]} onReject={() => setDone(true)} onCancel={() => {}} />
-      }
-    </div>
-  );
-};
+                        const RejectComponentFormDemo = () => {
+                                            const [di, setDi] = React.useState(1);
+                                            const [done, setDone] = React.useState(false);
+                                            return (
+                                            <div>
+                                            <StateBar>
+                                        {PIPELINE_FIXTURES.detections.map((d, i) => (
+                                            <Toggle key={i}
+                                        label={`${d.source_image}#${d.instance_id} · ${d.class_label}`}
+                                        active={di === i} onClick={() => {
+                        setDi(i);
+                        setDone(false);
+                        " />
+                    ))
+                    }
+                        </StateBar>
+                        <DemoNote>RPh surfaces this form when a component match is incorrect. Reason is required; rejection is immutable and logged to the audit trail.</DemoNote>
+                    {done
+                        ? <div style=" padding: '20px 16px', textAlign: 'center', background: 'var(--danger-bg)', border: '1px solid #e8bbb6', borderRadius: 4 ">
+                        <div style=" fontSize: 13, fontWeight: 600, color: 'var(--danger)', marginBottom: 6 ">Rejection recorded — compound flagged</div>
+                        <button className="demo-toggle" onClick={() => setDone(false)}>Reset demo</button>
+                    </div>
+                    : <RejectComponentForm detection={PIPELINE_FIXTURES.detections[di]} onReject={() => setDone(true)}
+                                                                                        onCancel={() => {
+                                                                                            " />
+                                                                                        }
+                                                                                            </div>
+                                                                                            );
+                                                                                        };
 
 // ─── Component registry ───────────────────────────────────────────────────────
-const REGISTRY = [
-  { id: 'ocr-fields',    group: 'OCR',      name: 'OCRFieldsTable',       Demo: OCRFieldsTableDemo,       desc: 'All 11 OCRFields extracted from a label crop — lot, exp, ndc, mfg, product, strength, vol_ml, brand, mdv, instructions, barcode_ndc. Per-field confidence bar, inline edit on click, source extractor tag.' },
-  { id: 'ocr-review',   group: 'OCR',      name: 'OCRReviewAlert',       Demo: OCRReviewAlertDemo,       desc: 'Banner surfaced when OCRFields.needs_review() returns True — any populated field whose confidence (regex_prior × variant_agreement) is below the review threshold.' },
-  { id: 'field-source', group: 'OCR',      name: 'FieldSourceTag',       Demo: FieldSourceTagDemo,       desc: 'Compact tag that surfaces the exact extractor that produced each OCR field value — e.g. extract_ndc:segmented, ndc_db_enrichment:mfg, barcode:GS1-128. Color encodes source kind.' },
-  { id: 'barcode-ndc',  group: 'OCR',      name: 'BarcodeNDCPanel',      Demo: BarcodeNDCPanelDemo,      desc: 'Side-by-side comparison of barcode_ndc (from GS1-128/DataMatrix decode via pyzbar) and OCR-inferred ndc. Barcode value is always preferred when present (conf ≥ 0.99).' },
-  { id: 'run-timeline', group: 'Pipeline', name: 'PipelineRunTimeline',  Demo: PipelineRunTimelineDemo,  desc: 'Expandable 6-stage pipeline timeline: Detect → Clean → OCR → Enrich → Embed → Match. Shows per-stage duration, status, and detail text. Highlights certified_subset mode.' },
-  { id: 'det-card',     group: 'Pipeline', name: 'DetectionSummaryCard', Demo: DetectionSummaryCardDemo, desc: 'Expandable card for one detection: source image, class label, detection score, assignment state (matched / OOI / forced / excess), OCR fields summary and full table.' },
-  { id: 'cleanup',      group: 'Pipeline', name: 'CleanupAuditPanel',    Demo: CleanupAuditPanelDemo,    desc: 'Audit trail for the cleanup stage: NMS merges (absorbed instance IDs, overlap %), frame-coverage rejects, and reflection-artifact rejects.' },
-  { id: 'ndc-enrich',   group: 'Pipeline', name: 'NDCEnrichmentPanel',   Demo: NDCEnrichmentPanelDemo,   desc: 'FDA NDC Directory lookup result — brand, generic name, manufacturer, dosage form, strength (DB). Shown only when a high-confidence NDC was extracted.' },
-  { id: 'new-capture',  group: 'Forms',    name: 'NewCaptureForm',       Demo: NewCaptureFormDemo,       desc: '3-step capture form: (1) order text + expected_components (–expect hints) + pre-scanned barcodes; (2) image slots; (3) run summary + certified_subset toggle.' },
-  { id: 'ocr-correct',  group: 'Forms',    name: 'OCRCorrectionForm',    Demo: OCRCorrectionFormDemo,    desc: 'Edit form for a single OCR field. Shows current value, source extractor, and confidence. Requires a reason; correction is appended to the compound audit trail.' },
-  { id: 'certify',      group: 'Forms',    name: 'CertifySubsetModal',   Demo: CertifySubsetModalDemo,   desc: 'RPh certification that every item in the subsequent images is contained in the reference inventory. Enables certified_subset_in_inventory=True in Pipeline.process().' },
-  { id: 'reject',       group: 'Forms',    name: 'RejectComponentForm',  Demo: RejectComponentFormDemo,  desc: 'Reject a component match with a mandatory reason (lot mismatch, NDC mismatch, therapeutic not authorized, etc.). Rejection is immutable and logged to audit.' },
-];
+                                                                                            const REGISTRY = [
+                                                                                        {id: 'ocr-fields',    group: 'OCR',      name: 'OCRFieldsTable',       Demo: OCRFieldsTableDemo,       desc: 'All 11 OCRFields extracted from a label crop — lot, exp, ndc, mfg, product, strength, vol_ml, brand, mdv, instructions, barcode_ndc. Per-field confidence bar, inline edit on click, source extractor tag.'},
+                                                                                        {id: 'ocr-review',   group: 'OCR',      name: 'OCRReviewAlert',       Demo: OCRReviewAlertDemo,       desc: 'Banner surfaced when OCRFields.needs_review() returns True — any populated field whose confidence (regex_prior × variant_agreement) is below the review threshold.'},
+                                                                                        {id: 'field-source', group: 'OCR',      name: 'FieldSourceTag',       Demo: FieldSourceTagDemo,       desc: 'Compact tag that surfaces the exact extractor that produced each OCR field value — e.g. extract_ndc:segmented, ndc_db_enrichment:mfg, barcode:GS1-128. Color encodes source kind.'},
+                                                                                        {id: 'barcode-ndc',  group: 'OCR',      name: 'BarcodeNDCPanel',      Demo: BarcodeNDCPanelDemo,      desc: 'Side-by-side comparison of barcode_ndc (from GS1-128/DataMatrix decode via pyzbar) and OCR-inferred ndc. Barcode value is always preferred when present (conf ≥ 0.99).'},
+                                                                                        {id: 'run-timeline', group: 'Pipeline', name: 'PipelineRunTimeline',  Demo: PipelineRunTimelineDemo,  desc: 'Expandable 6-stage pipeline timeline: Detect → Clean → OCR → Enrich → Embed → Match. Shows per-stage duration, status, and detail text. Highlights certified_subset mode.'},
+                                                                                        {id: 'det-card',     group: 'Pipeline', name: 'DetectionSummaryCard', Demo: DetectionSummaryCardDemo, desc: 'Expandable card for one detection: source image, class label, detection score, assignment state (matched / OOI / forced / excess), OCR fields summary and full table.'},
+                                                                                        {id: 'cleanup',      group: 'Pipeline', name: 'CleanupAuditPanel',    Demo: CleanupAuditPanelDemo,    desc: 'Audit trail for the cleanup stage: NMS merges (absorbed instance IDs, overlap %), frame-coverage rejects, and reflection-artifact rejects.'},
+                                                                                        {id: 'ndc-enrich',   group: 'Pipeline', name: 'NDCEnrichmentPanel',   Demo: NDCEnrichmentPanelDemo,   desc: 'FDA NDC Directory lookup result — brand, generic name, manufacturer, dosage form, strength (DB). Shown only when a high-confidence NDC was extracted.'},
+                                                                                        {id: 'new-capture',  group: 'Forms',    name: 'NewCaptureForm',       Demo: NewCaptureFormDemo,       desc: '3-step capture form: (1) order text + expected_components (–expect hints) + pre-scanned barcodes; (2) image slots; (3) run summary + certified_subset toggle.'},
+                                                                                        {id: 'ocr-correct',  group: 'Forms',    name: 'OCRCorrectionForm',    Demo: OCRCorrectionFormDemo,    desc: 'Edit form for a single OCR field. Shows current value, source extractor, and confidence. Requires a reason; correction is appended to the compound audit trail.'},
+                                                                                        {id: 'certify',      group: 'Forms',    name: 'CertifySubsetModal',   Demo: CertifySubsetModalDemo,   desc: 'RPh certification that every item in the subsequent images is contained in the reference inventory. Enables certified_subset_in_inventory=True in Pipeline.process().'},
+                                                                                        {id: 'reject',       group: 'Forms',    name: 'RejectComponentForm',  Demo: RejectComponentFormDemo,  desc: 'Reject a component match with a mandatory reason (lot mismatch, NDC mismatch, therapeutic not authorized, etc.). Rejection is immutable and logged to audit.'},
+                                                                                            ];
 
-const GROUPS = ['OCR', 'Pipeline', 'Forms'];
-const GROUP_COUNT = { OCR: '4 components', Pipeline: '4 components', Forms: '4 components' };
+                                                                                            const GROUPS = ['OCR', 'Pipeline', 'Forms'];
+                                                                                            const GROUP_COUNT = {OCR: '4 components', Pipeline: '4 components', Forms: '4 components'};
 
 // ─── Showcase shell ───────────────────────────────────────────────────────────
-function Showcase() {
-  const [activeId, setActiveId] = React.useState('ocr-fields');
-  const active = REGISTRY.find(c => c.id === activeId);
+                                                                                            function Showcase() {
+                                                                                            const [activeId, setActiveId] = React.useState('ocr-fields');
+                                                                                            const active = REGISTRY.find(c => c.id === activeId);
 
-  React.useEffect(() => {
-    if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 1.5 } });
-  });
+                                                                                            React.useEffect(() => {
+                                                                                            if (window.lucide) window.lucide.createIcons({attrs: {'stroke-width': 1.5}});
+                                                                                        });
 
-  return (
-    <div style={{ height: '100vh', display: 'flex', overflow: 'hidden', background: 'var(--bg-app)' }}>
+                                                                                            return (
+                                                                                            <div style=" height: '100vh', display: 'flex', overflow: 'hidden', background: 'var(--bg-app)' ">
 
-      {/* ── Sidebar ── */}
-      <aside style={{ width: 210, background: 'var(--bg-sidebar)', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Wordmark */}
-        <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 18, color: '#ffffff', letterSpacing: '-0.01em' }}>
-            Rx<span style={{ opacity: 0.45 }}>·</span>Cv
-          </div>
-          <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.38)', marginTop: 2, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Component library
-          </div>
-        </div>
+                                                                                        {/* ── Sidebar ── */}
+                <aside
+                    style=" width: 210, background: 'var(--bg-sidebar)', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' ">
+                    {/* Wordmark */}
+                    <div
+                        style=" padding: '14px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 ">
+                        <div
+                            style=" fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 18, color: '#ffffff', letterSpacing: '-0.01em' ">
+                            Rx<span style=" opacity: 0.45 ">·</span>Cv
+                        </div>
+                        <div
+                            style=" fontSize: 9.5, color: 'rgba(255,255,255,0.38)', marginTop: 2, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' ">
+                            Component library
+                        </div>
+                    </div>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}>
-          {GROUPS.map(group => (
-            <div key={group} style={{ marginBottom: 4 }}>
-              <div style={{ padding: '8px 16px 3px', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.32)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>{group}</span>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)' }}>{GROUP_COUNT[group]}</span>
-              </div>
-              {REGISTRY.filter(c => c.group === group).map(c => {
-                const isActive = activeId === c.id;
-                return (
-                  <button key={c.id} onClick={() => setActiveId(c.id)}
-                    style={{ width: '100%', textAlign: 'left', border: 'none', padding: '6px 16px', borderLeft: `2px solid ${isActive ? 'var(--teal-500)' : 'transparent'}`, background: isActive ? 'rgba(255,255,255,0.07)' : 'transparent', color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: isActive ? 500 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', display: 'block', transition: 'background 80ms' }}
-                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.85)'; }}
-                    onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}}>
-                    {c.name}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+                    {/* Nav */}
+                    <nav style=" flex: 1, overflow: 'auto', padding: '8px 0' ">
+                        {GROUPS.map(group => (
+                            <div key={group} style=" marginBottom: 4 ">
+                                <div style=" padding: '8px 16px 3px', display: 'flex', alignItems: 'baseline', gap: 8 ">
+                                    <span
+                                        style=" fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.32)', textTransform: 'uppercase', letterSpacing: '0.09em' ">{group}</span>
+                                    <span
+                                        style=" fontSize: 9, color: 'rgba(255,255,255,0.2)' ">{GROUP_COUNT[group]}</span>
+                                </div>
+                                {REGISTRY.filter(c => c.group === group).map(c => {
+                                    const isActive = activeId === c.id;
+                                    return (
+                                        <button key={c.id} onClick={() => setActiveId(c.id)}
+                                                style=" width: '100%', textAlign: 'left', border: 'none', padding: '6px 16px', borderLeft: `2px solid ${isActive ? 'var(--teal-500)' : 'transparent'}`, background: isActive ? 'rgba(255,255,255,0.07)' : 'transparent', color: isActive ? '#ffffff' : 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: isActive ? 500 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', display: 'block', transition: 'background 80ms' "
+                                                onMouseEnter={e => {
+                                                    if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                                    e.currentTarget.style.color = 'rgba(255,255,255,0.85)';
+                                                }}
+                                                onMouseLeave={e => {
+                                                    if (!isActive) {
+                                                        e.currentTarget.style.background = 'transparent';
+                                                        e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
+                                                    }
+                                                }}>
+                                            {c.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </nav>
 
-        {/* Footer */}
-        <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
-            rxocrpl/ocr/ocr_fields.py<br />rxocrpl/pipeline.py
-          </div>
-        </div>
-      </aside>
+                    {/* Footer */}
+                    <div style=" padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 ">
+                        <div
+                            style=" fontSize: 9, color: 'rgba(255,255,255,0.25)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 ">
+                            rxocrpl/ocr/ocr_fields.py<br/>rxocrpl/pipeline.py
+                        </div>
+                    </div>
+                </aside>
 
-      {/* ── Main ── */}
-      <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
-        {active && (
-          <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 32px 48px' }}>
-            {/* Component header */}
-            <div style={{ marginBottom: 22 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>{active.group}</span>
-                <span style={{ width: 1, height: 10, background: 'var(--border-strong)' }} />
-                <span style={{ fontSize: 9.5, color: 'var(--fg-muted)' }}>
+                {/* ── Main ── */}
+                <main style=" flex: 1, overflow: 'auto', minWidth: 0 ">
+                    {active && (
+                        <div style=" maxWidth: 720, margin: '0 auto', padding: '28px 32px 48px' ">
+                            {/* Component header */}
+                            <div style=" marginBottom: 22 ">
+                                <div style=" display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 ">
+                                    <span
+                                        style=" fontSize: 9.5, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.09em' ">{active.group}</span>
+                                    <span style=" width: 1, height: 10, background: 'var(--border-strong)' "/>
+                                    <span style=" fontSize: 9.5, color: 'var(--fg-muted)' ">
                   {REGISTRY.findIndex(c => c.id === activeId) + 1} / {REGISTRY.length}
                 </span>
-              </div>
-              <h1 style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 600, color: 'var(--fg-primary)', letterSpacing: '-0.01em' }}>
-                {active.name}
-              </h1>
-              <p style={{ margin: '7px 0 0', fontSize: 13, color: 'var(--fg-tertiary)', lineHeight: 1.65, maxWidth: 600 }}>
-                {active.desc}
-              </p>
+                                </div>
+                                <h1 style=" margin: 0, fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 600, color: 'var(--fg-primary)', letterSpacing: '-0.01em' ">
+                                    {active.name}
+                                </h1>
+                                <p style=" margin: '7px 0 0', fontSize: 13, color: 'var(--fg-tertiary)', lineHeight: 1.65, maxWidth: 600 ">
+                                    {active.desc}
+                                </p>
+                            </div>
+
+                            {/* Divider */}
+                            <div style=" height: 1, background: 'var(--border-default)', marginBottom: 20 "/>
+
+                            {/* Demo */}
+                            <active.Demo/>
+
+                            {/* Nav footer */}
+                            <div
+                                style=" marginTop: 28, paddingTop: 16, borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' ">
+                                {(() => {
+                                    const idx = REGISTRY.findIndex(c => c.id === activeId);
+                                    const prev = REGISTRY[idx - 1];
+                                    const next = REGISTRY[idx + 1];
+                                    return (
+                                        <>
+                                            {prev
+                                                ? <button onClick={() => setActiveId(prev.id)}
+                                                          style=" height: 28, padding: '0 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 2, fontSize: 12, color: 'var(--fg-secondary)', cursor: 'pointer', fontFamily: 'var(--font-sans)' ">← {prev.name}</button>
+                                                : <div/>}
+                                            {next
+                                                ? <button onClick={() => setActiveId(next.id)}
+                                                          style=" height: 28, padding: '0 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 2, fontSize: 12, color: 'var(--fg-secondary)', cursor: 'pointer', fontFamily: 'var(--font-sans)' ">{next.name} →</button>
+                                                : <div/>}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    )}
+                </main>
             </div>
+        );
+    }
 
-            {/* Divider */}
-            <div style={{ height: 1, background: 'var(--border-default)', marginBottom: 20 }} />
-
-            {/* Demo */}
-            <active.Demo />
-
-            {/* Nav footer */}
-            <div style={{ marginTop: 28, paddingTop: 16, borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              {(() => {
-                const idx  = REGISTRY.findIndex(c => c.id === activeId);
-                const prev = REGISTRY[idx - 1];
-                const next = REGISTRY[idx + 1];
-                return (
-                  <>
-                    {prev
-                      ? <button onClick={() => setActiveId(prev.id)} style={{ height: 28, padding: '0 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 2, fontSize: 12, color: 'var(--fg-secondary)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>← {prev.name}</button>
-                      : <div />}
-                    {next
-                      ? <button onClick={() => setActiveId(next.id)} style={{ height: 28, padding: '0 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 2, fontSize: 12, color: 'var(--fg-secondary)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>{next.name} →</button>
-                      : <div />}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<Showcase />);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<Showcase/>);
 
 </script>
 </body>

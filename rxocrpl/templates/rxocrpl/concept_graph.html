@@ -154,7 +154,7 @@
                 <div class="controls">
                     <button class="button button-secondary" onclick="runLayout('dagre')">Hierarchical</button>
                     <button class="button button-secondary" onclick="runLayout('cose')">Force-Directed (Cola)</button>
-                    <button class="button button-secondary" onclick="cy.fit()">Fit</button>
+                    <button class="button button-secondary" onclick="cy.fit(); applyMinZoomFromFit()">Fit</button>
                     <button class="button button-secondary" onclick="location.reload()">Collapse Groups</button>
                 </div>
             </div>
@@ -255,6 +255,18 @@
             item.innerHTML = `<div class="legend-color" style="background: ${COLORS[tty]}"></div><span>${tty}</span>`;
             legendEl.appendChild(item);
         });
+
+        function applyMinZoomFromFit() {
+            // node.position() returns final logical positions regardless of animation
+            // state, so boundingBox() is accurate even while the layout is animating.
+            const bb = cy.elements().boundingBox();
+            if (!bb.w || !bb.h) return;
+            const fitZoom = Math.min(
+                (cy.width() - 30) / bb.w,
+                (cy.height() - 30) / bb.h
+            );
+            cy.minZoom(fitZoom * 0.9);
+        }
 
         var cy = cytoscape({
             container: document.getElementById('cy'),
@@ -444,36 +456,90 @@
         }
 
         function runLayout(name) {
-            let options = {
-                name: name,
-                animate: true,
-                animationDuration: 500
-            };
-
             if (name === 'dagre') {
-                options.name = 'dagre';
-                options.rankDir = 'TB';
-                options.ranker = 'network-simplex';
-                options.nodeSep = 25;
-                options.rankSep = 55;
-                options.edgeSep = 5;
-                options.marginX = 10;
-                options.marginY = 10;
-                options.nodeDimensionsIncludeLabels = true;
-                options.fit = true;
-                options.padding = 15;
-            } else if (name === 'cose') {
-                options.name = 'cola';
-                options.avoidOverlap = true;
-                options.nodeDimensionsIncludeLabels = true;
-                options.flow = { axis: 'x', minSeparation: 55 };
-                options.edgeLength = 70;
-                options.padding = 15;
-                options.maxSimulationTime = 3000;
-                options.fit = true;
+                // BFS from anchor to estimate graph depth vs max-width-per-rank
+                const rootEl = cy.getElementById(anchorId);
+                const visited = new Set([anchorId]);
+                let frontier = rootEl.length ? [rootEl] : [cy.nodes().first()];
+                let maxWidth = 1, depth = 0;
+                while (frontier.length > 0) {
+                    maxWidth = Math.max(maxWidth, frontier.length);
+                    depth++;
+                    const next = [];
+                    frontier.forEach(n => n.neighborhood('node').forEach(nb => {
+                        if (!visited.has(nb.id())) { visited.add(nb.id()); next.push(nb); }
+                    }));
+                    frontier = next;
+                }
+
+                // Choose LR vs TB: pick whichever produces an aspect ratio
+                // closer to the container's own aspect ratio.
+                // LR → graph width ∝ depth, height ∝ maxWidth
+                // TB → graph width ∝ maxWidth, height ∝ depth
+                const cw = cy.width() || 800, ch = cy.height() || 600;
+                const containerRatio = cw / ch;
+                const lrDiff = Math.abs(Math.log(depth / maxWidth) - Math.log(containerRatio));
+                const tbDiff = Math.abs(Math.log(maxWidth / depth) - Math.log(containerRatio));
+                // Force LR when the widest rank has many siblings — TB would spread them
+                // into one overflowing horizontal row; LR stacks them into a vertical column.
+                const dir = (maxWidth > 7 || lrDiff <= tbDiff) ? 'LR' : 'TB';
+
+                // Compute spacing so nodes spread to fill ~80% of the container
+                const estNodeW = 120, estNodeH = 35;
+                let rankSep, nodeSep;
+                if (dir === 'LR') {
+                    rankSep = Math.max(45, Math.floor(cw * 0.82 / depth - estNodeW));
+                    nodeSep = Math.max(8,  Math.floor(ch * 0.85 / maxWidth - estNodeH));
+                } else {
+                    rankSep = Math.max(40, Math.floor(ch * 0.82 / depth - estNodeH));
+                    nodeSep = Math.max(8,  Math.floor(cw * 0.85 / maxWidth - estNodeW));
+                }
+
+                const layout = cy.layout({
+                    name: 'dagre',
+                    animate: true, animationDuration: 500,
+                    rankDir: dir, ranker: 'network-simplex',
+                    nodeSep, rankSep, edgeSep: 5,
+                    nodeDimensionsIncludeLabels: true,
+                    fit: true, padding: 15,
+                });
+
+                // After layout: gently compress the rank axis if it's still
+                // more than 2× off from the container ratio, to avoid extreme shapes.
+                layout.one('layoutstop', () => {
+                    const bb = cy.elements().boundingBox();
+                    const gr = bb.w / bb.h;
+                    if (dir === 'LR' && gr > containerRatio * 2) {
+                        const s = Math.sqrt((containerRatio * 2) / gr);
+                        const mx = (bb.x1 + bb.x2) / 2;
+                        cy.nodes().forEach(n => n.position('x', mx + (n.position('x') - mx) * s));
+                        cy.fit(15);
+                    } else if (dir === 'TB' && gr < containerRatio / 2) {
+                        const s = Math.sqrt(gr / (containerRatio / 2));
+                        const my = (bb.y1 + bb.y2) / 2;
+                        cy.nodes().forEach(n => n.position('y', my + (n.position('y') - my) * s));
+                        cy.fit(15);
+                    }
+                    applyMinZoomFromFit();
+                });
+                layout.run();
+                return;
             }
 
-            cy.layout(options).run();
+            // Force-directed: cola, no directional constraint
+            const colaLayout = cy.layout({
+                name: 'cola',
+                animate: true, animationDuration: 500,
+                avoidOverlap: true,
+                nodeDimensionsIncludeLabels: true,
+                edgeLength: 70,
+                padding: 15,
+                maxSimulationTime: 2500,
+                randomize: false,
+                fit: true,
+            });
+            colaLayout.one('layoutstop', () => { applyMinZoomFromFit(); });
+            colaLayout.run();
         }
 
         runLayout('dagre');

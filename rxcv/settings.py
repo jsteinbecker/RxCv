@@ -37,6 +37,7 @@ INSTALLED_APPS = [
       'django.contrib.sessions',
       'django.contrib.messages',
       'django.contrib.staticfiles',
+      'rest_framework',
       'cv.apps.CvConfig',
       'rxocrpl.apps.RxOcrPlConfig'
 ]
@@ -111,8 +112,21 @@ USE_I18N = True
 USE_TZ = True
 
 AUTH_USER_MODEL = 'cv.User'
+LOGIN_URL = '/admin/login/'
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+REST_FRAMEWORK = {
+      'DEFAULT_RENDERER_CLASSES': (
+            'rest_framework.renderers.JSONRenderer',
+            'rest_framework.renderers.BrowsableAPIRenderer',
+      ),
+      'DEFAULT_PERMISSION_CLASSES': (
+            'rest_framework.permissions.AllowAny',
+      ),
+      'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+      'PAGE_SIZE': 50,
+}

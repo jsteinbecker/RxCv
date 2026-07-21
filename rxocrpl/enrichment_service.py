@@ -7,6 +7,10 @@ from typing import Any
 from django.db import transaction
 
 from rxocrpl.fda import lookup_ndc_package
+from rxocrpl.dailymed_rxnorm_linker import (
+    link_product_from_setid_map,
+    load_setid_map,
+)
 from rxocrpl.models import (
     Labeler,
     ListedIngredient,
@@ -221,6 +225,7 @@ def sync_product_from_external_sources(ndc: str) -> Product | None:
 
     concept = enrichment.concept if enrichment.concept_rxcui else None
     enrichment_dict = enrichment.to_dict() if enrichment.concept_rxcui else None
+    setid_index = None if enrichment.concept_rxcui else load_setid_map()
 
     with transaction.atomic():
         labeler = get_or_update_labeler(
@@ -265,6 +270,14 @@ def sync_product_from_external_sources(ndc: str) -> Product | None:
         except Exception:
             logger.exception(
                 "Error materializing concept graph for NDC %s",
+                ndc,
+            )
+    elif setid_index is not None:
+        try:
+            link_product_from_setid_map(product, setid_index)
+        except Exception:
+            logger.exception(
+                "Error linking product %s from DailyMed setid map",
                 ndc,
             )
 

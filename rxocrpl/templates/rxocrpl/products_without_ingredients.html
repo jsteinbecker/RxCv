@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Products Without Ingredients · RxCv{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h1>Products Without Ingredients</h1>
+        {% if products %}
+            <p>The following products do not have any associated ingredients:</p>
+            <ul>
+                {% for product in products %}
+                    <li>
+                        <a href="{% url 'rxocrpl:ndc_product_detail' product.pk %}">{{ product }}</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p><i class="fa-solid fa-check" style="color: green;"></i> All products have been linked to an ingredient.
+            </p>
+        {% endif %}
+    </div>
+{% endblock %}
