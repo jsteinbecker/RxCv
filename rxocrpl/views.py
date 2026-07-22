@@ -26,9 +26,6 @@ from .models import (
       RxNormConcept,
       RxNormConceptRelation,
 )
-from .models import (
-      User as RxUser,
-)
 
 
 def index (request):
@@ -714,34 +711,28 @@ def claim_facility_view (request, pk):
                   "admins": current_admins,
             })
 
-      existing_profile = getattr(request.user, "facility_profile", None)
-      if existing_profile and existing_profile.facility_id != facility.pk:
+      if request.user.facility_id and request.user.facility_id != facility.pk:
             return render(request, "rxocrpl/facility_claim.html", {
                   "facility": facility,
                   "state": "wrong_facility",
-                  "your_facility": existing_profile.facility,
+                  "your_facility": request.user.facility,
             })
 
       if request.method == "POST":
-            if existing_profile is None:
-                  rx_user = RxUser.objects.create(
-                        auth_user=request.user,
-                        name=request.user.get_full_name() or request.user.username,
-                        facility=facility,
-                  )
-            else:
-                  rx_user = existing_profile
+            if not request.user.facility_id:
+                  request.user.facility = facility
+                  request.user.save(update_fields=["facility"])
 
             role, _ = Role.objects.get_or_create(
                   name="facility_admin",
                   defaults={"description": "Facility administrator"},
             )
             already_admin = RoleGrant.objects.filter(
-                  user=rx_user, facility=facility, role=role, revoked_at__isnull=True
+                  user=request.user, facility=facility, role=role, revoked_at__isnull=True
             ).exists()
             if not already_admin:
                   grant = RoleGrant(
-                        user=rx_user,
+                        user=request.user,
                         role=role,
                         facility=facility,
                         granted_by=None,
@@ -758,5 +749,5 @@ def claim_facility_view (request, pk):
       return render(request, "rxocrpl/facility_claim.html", {
             "facility": facility,
             "state": "confirm",
-            "existing_profile": existing_profile,
+            "existing_profile": request.user if request.user.facility_id else None,
       })
