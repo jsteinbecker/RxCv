@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}RxOCR Pipeline · RxCv{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <h1>RxOCR Pipeline</h1>
+            <a href="stats/" class="button button-secondary">Full Statistics</a>
+        </div>
+        <p>Terminology management and data enrichment tools for drug products.</p>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Terminology Browsing</h3>
+            <p>Explore RxNorm concepts by Term Type (TTY).</p>
+            <ul style="padding-left: 1.2rem; line-height: 1.8;">
+                <li><a href="tty/SCD/">Semantic Clinical Drugs (SCD)</a></li>
+                <li><a href="tty/SBD/">Semantic Branded Drugs (SBD)</a></li>
+                <li><a href="tty/GPCK/">Generic Pack (GPCK)</a></li>
+                <li><a href="tty/BPCK/">Brand Pack (BPCK)</a></li>
+                <li><a href="tty/IN/">Ingredients (IN)</a></li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>NDC Products</h3>
+            <p>Browse FDA-listed drug products and labelers.</p>
+            <ul style="padding-left: 1.2rem; line-height: 1.8;">
+                <li><a href="ndc/">All Products</a></li>
+                <li><a href="labeler/">By Labeler</a></li>
+            </ul>
+            <p>
+                {% if products_without_ingredients %}
+                    <strong>Products without ingredients:</strong> {{ products_without_ingredients }}
+                    <a href="{% url 'rxocrpl:products_without_ingredients' %}">View Details</a>
+                {% else %}
+                    <i class="fa-solid fa-check" style="color: green;"></i>
+                    <strong>All products have been linked to an ingredient.</strong>
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>Quick Stats</h3>
+            <table style="width: 100%; font-size: 0.9rem;">
+                <tr>
+                    <td style="padding: 4px 0;">Total Concepts:</td>
+                    <td style="text-align: right; font-weight: 600;">{{ total_concepts }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px 0;">Total Products:</td>
+                    <td style="text-align: right; font-weight: 600;">{{ total_products }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px 0;">Total Ingredients:</td>
+                    <td style="text-align: right; font-weight: 600;">{{ total_ingredients }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3>Maintenance</h3>
+            <p>Data import and synchronization tools.</p>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <a href="ndc/data/loadall/" class="button button-secondary" style="font-size: 0.8rem;">Load NDC
+                    Products</a>
+                <a href="ndc/data/loadpkg/" class="button button-secondary" style="font-size: 0.8rem;">Load Packages</a>
+                <a href="ndc/data/loadingredients/" class="button button-secondary" style="font-size: 0.8rem;">Sync
+                    Ingredients</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}

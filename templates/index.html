@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Home · RxCv{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h1>Welcome to RxCv</h1>
+        <p class="body-lg">A comprehensive system for drug product data enrichment and OCR pipeline processing.</p>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>RxOCR Pipeline</h2>
+            <p>Access drug terminology, graph relations, and automated data enrichment tools.</p>
+            <a href="/rxocrpl/" class="button">Go to RxOCR</a>
+        </div>
+        <div class="card">
+            <h2>Admin Interface</h2>
+            <p>Manage products, labelers, and system configurations directly.</p>
+            <a href="/admin/" class="button button-secondary">Open Admin</a>
+        </div>
+    </div>
+{% endblock %}

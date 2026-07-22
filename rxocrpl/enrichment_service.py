@@ -266,7 +266,9 @@ def sync_product_from_external_sources(ndc: str) -> Product | None:
     # Do not run graph/network work while the DB transaction is open.
     if enrichment.concept_rxcui:
         try:
-            add_concept_by_ndc(ndc)
+            anchor = add_concept_by_ndc(ndc)
+            if anchor is not None:
+                product.concepts.add(anchor)
         except Exception:
             logger.exception(
                 "Error materializing concept graph for NDC %s",
@@ -274,7 +276,11 @@ def sync_product_from_external_sources(ndc: str) -> Product | None:
             )
     elif setid_index is not None:
         try:
-            link_product_from_setid_map(product, setid_index)
+            result = link_product_from_setid_map(product, setid_index)
+            if result is not None:
+                anchor = add_concept_by_ndc(ndc)
+                if anchor is not None:
+                    product.concepts.add(anchor)
         except Exception:
             logger.exception(
                 "Error linking product %s from DailyMed setid map",

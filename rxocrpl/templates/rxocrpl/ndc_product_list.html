@@ -137,8 +137,8 @@
     <table>
         <thead>
         <tr>
-            <th>Generic Name</th>
-            <th>Brand Name</th>
+            <th>Substance</th>
+            <th>Generic (Brand)</th>
             <th>NDC</th>
             <th>Dosage Form</th>
         </tr>
@@ -148,10 +148,15 @@
             <tr>
                 <td>
                     <a href="{% url 'rxocrpl:ndc_product_detail' product.product_ndc %}">
-                        {{ product.generic_name }}
+                        {{ product.as_substance }}
                     </a>
                 </td>
-                <td>{{ product.brand_name }}</td>
+                <td>
+                    {{ product.generic_name }}
+                    {% if product.generic_name.lower != product.brand_name.lower %}
+                        (<i>{{ product.brand_name }}</i>)
+                    {% endif %}
+                </td>
                 <td><span class="ndc-code">{{ product.product_ndc }}</span></td>
                 <td>
                     {% if product.dosage_form %}

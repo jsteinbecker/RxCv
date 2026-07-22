@@ -148,7 +148,9 @@
             <div>
                 <h1 style="margin:0">{{ concept.name }}</h1>
                 <p style="margin:0"><strong>RXCUI:</strong> {{ concept.rxcui }} |
-                    <strong>TTY:</strong> {{ concept.tty }}</p>
+                    <strong>TTY:</strong> {{ concept.tty }} |
+                    <a href="{% url 'admin:rxocrpl_rxnormconcept_change' concept.rxcui %}">Admin</a>
+                </p>
             </div>
             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem;">
                 <div class="controls">
@@ -175,45 +177,45 @@
             <div class="legend" id="legend"></div>
 
             {% if confirmed_product_links %}
-            <div class="products-section">
-                <h4>Mapped Products ({{ confirmed_product_links|length }})</h4>
-                <ul class="product-list">
-                    {% for link in confirmed_product_links %}
-                    {% if link.product %}
-                    <li>
-                        <a href="{% url 'rxocrpl:ndc_product_detail' link.product.product_ndc %}">
-                            {{ link.product.brand_name|default:link.product.generic_name }}
-                            <span class="product-ndc">{{ link.product.product_ndc }}</span>
-                        </a>
-                    </li>
-                    {% endif %}
-                    {% endfor %}
-                </ul>
-            </div>
+                <div class="products-section">
+                    <h4>Mapped Products ({{ confirmed_product_links|length }})</h4>
+                    <ul class="product-list">
+                        {% for link in confirmed_product_links %}
+                            {% if link.product %}
+                                <li>
+                                    <a href="{% url 'rxocrpl:ndc_product_detail' link.product.product_ndc %}">
+                                        {{ link.product.brand_name|default:link.product.generic_name }}
+                                        <span class="product-ndc">{{ link.product.product_ndc }}</span>
+                                    </a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
 
             {% if possible_product_links %}
-            <div class="products-section">
-                <h4>Possible Products ({{ possible_product_links|length }})</h4>
-                <ul class="product-list">
-                    {% for link in possible_product_links %}
-                    <li>
-                        <a href="{% url 'rxocrpl:ndc_product_detail' link.product.product_ndc %}">
-                            {{ link.product.brand_name|default:link.product.generic_name }}
-                            <span class="product-ndc">{{ link.product.product_ndc }}</span>
-                            <span class="match-hint">via "{{ link.matched_term }}"</span>
-                        </a>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
+                <div class="products-section">
+                    <h4>Possible Products ({{ possible_product_links|length }})</h4>
+                    <ul class="product-list">
+                        {% for link in possible_product_links %}
+                            <li>
+                                <a href="{% url 'rxocrpl:ndc_product_detail' link.product.product_ndc %}">
+                                    {{ link.product.brand_name|default:link.product.generic_name }}
+                                    <span class="product-ndc">{{ link.product.product_ndc }}</span>
+                                    <span class="match-hint">via "{{ link.matched_term }}"</span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
 
             {% if not confirmed_product_links and not possible_product_links %}
-            <div class="products-section">
-                <h4>Related Products</h4>
-                <p class="caption" style="font-size: 11px;">No products linked to this concept.</p>
-            </div>
+                <div class="products-section">
+                    <h4>Related Products</h4>
+                    <p class="caption" style="font-size: 11px;">No products linked to this concept.</p>
+                </div>
             {% endif %}
         </div>
     </div>
@@ -467,7 +469,10 @@
                     depth++;
                     const next = [];
                     frontier.forEach(n => n.neighborhood('node').forEach(nb => {
-                        if (!visited.has(nb.id())) { visited.add(nb.id()); next.push(nb); }
+                        if (!visited.has(nb.id())) {
+                            visited.add(nb.id());
+                            next.push(nb);
+                        }
                     }));
                     frontier = next;
                 }
@@ -489,10 +494,10 @@
                 let rankSep, nodeSep;
                 if (dir === 'LR') {
                     rankSep = Math.max(45, Math.floor(cw * 0.82 / depth - estNodeW));
-                    nodeSep = Math.max(8,  Math.floor(ch * 0.85 / maxWidth - estNodeH));
+                    nodeSep = Math.max(8, Math.floor(ch * 0.85 / maxWidth - estNodeH));
                 } else {
                     rankSep = Math.max(40, Math.floor(ch * 0.82 / depth - estNodeH));
-                    nodeSep = Math.max(8,  Math.floor(cw * 0.85 / maxWidth - estNodeW));
+                    nodeSep = Math.max(8, Math.floor(cw * 0.85 / maxWidth - estNodeW));
                 }
 
                 const layout = cy.layout({
@@ -538,7 +543,9 @@
                 randomize: false,
                 fit: true,
             });
-            colaLayout.one('layoutstop', () => { applyMinZoomFromFit(); });
+            colaLayout.one('layoutstop', () => {
+                applyMinZoomFromFit();
+            });
             colaLayout.run();
         }
 
@@ -583,11 +590,11 @@
         // Add highlighting style
         cy.style()
             .selector('edge.highlighted').style({
-                'line-color': '#3b82f6',
-                'target-arrow-color': '#3b82f6',
-                'width': 3,
-                'opacity': 1
-            })
+            'line-color': '#3b82f6',
+            'target-arrow-color': '#3b82f6',
+            'width': 3,
+            'opacity': 1
+        })
             .update();
 
         async function syncFromRxNorm() {

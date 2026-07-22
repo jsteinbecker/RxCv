@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Claim Facility – RxCv{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:540px;margin:2rem auto;">
+
+{% if state == "success" %}
+  <h2>Facility Claimed</h2>
+  <p>You are now the administrator for <strong>{{ facility }}</strong>.</p>
+  <a class="button" href="{% url 'rxocrpl:facility_list' %}">Back to Facilities</a>
+
+{% elif state == "already_claimed" %}
+  <h2>Already Claimed</h2>
+  <p><strong>{{ facility }}</strong> already has an administrator:</p>
+  <ul>{% for a in admins %}<li>{{ a }}</li>{% endfor %}</ul>
+  <a class="button button-secondary" href="{% url 'rxocrpl:facility_list' %}">Back</a>
+
+{% elif state == "wrong_facility" %}
+  <h2>Already Assigned</h2>
+  <p>Your account is already linked to <strong>{{ your_facility }}</strong>. A user can only belong to one facility.</p>
+  <a class="button button-secondary" href="{% url 'rxocrpl:facility_list' %}">Back</a>
+
+{% else %}
+  <h2>Claim {{ facility }}</h2>
+  <p>This facility has no administrator. Claiming it will make you its facility admin.</p>
+  {% if existing_profile %}
+    <p>Your profile is already linked to this facility as <em>{{ existing_profile }}</em>. Confirming will grant you the <strong>facility_admin</strong> role.</p>
+  {% else %}
+    <p>A facility profile will be created for your account (<strong>{{ user.username }}</strong>).</p>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="button">Confirm Claim</button>
+    <a class="button button-secondary" href="{% url 'rxocrpl:facility_list' %}" style="margin-left:.5rem;">Cancel</a>
+  </form>
+{% endif %}
+
+</div>
+{% endblock %}

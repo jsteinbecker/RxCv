@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}CSP Order Builder — RxCv{% endblock %}
+
+{% block extra_head %}
+<style>
+    .builder-wrap { max-width: 960px; margin: 0 auto; }
+    .builder-wrap h1 { margin-bottom: 0.25rem; }
+    .builder-wrap .subtitle { color: var(--fg-muted); margin-bottom: 1.5rem; }
+
+    /* ── Summary strip ── */
+    .summary-strip {
+        display: flex; gap: 1.5rem; flex-wrap: wrap;
+        background: var(--bg-surface); border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md); padding: 1rem 1.25rem;
+        margin-bottom: 1.5rem; box-shadow: var(--shadow-1);
+    }
+    .summary-strip .metric { text-align: center; min-width: 120px; }
+    .summary-strip .metric .value {
+        font-size: 1.75rem; font-weight: 700; color: var(--brand);
+    }
+    .summary-strip .metric .label {
+        font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--fg-muted);
+    }
+
+    /* ── Component rows ── */
+    .component-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .component-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+        gap: 0.75rem; align-items: end;
+        background: var(--bg-surface); border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-1);
+    }
+    .component-row .field label {
+        display: block; font-size: 0.75rem; font-weight: 600;
+        margin-bottom: 0.25rem; color: var(--fg-muted);
+    }
+    .component-row select,
+    .component-row input {
+        width: 100%; padding: 0.4rem 0.5rem;
+        border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+        font-size: 0.875rem; background: var(--bg-app);
+    }
+    .component-row .conc-display {
+        font-size: 0.875rem; padding: 0.4rem 0; color: var(--fg-primary);
+        min-height: 1.6rem;
+    }
+    .btn-remove {
+        background: none; border: none; color: var(--fg-muted);
+        font-size: 1.25rem; cursor: pointer; padding: 0.25rem;
+    }
+    .btn-remove:hover { color: #e53e3e; }
+
+    /* ── Concentration table ── */
+    .conc-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    .conc-table th, .conc-table td {
+        text-align: left; padding: 0.4rem 0.75rem;
+        border-bottom: 1px solid var(--border-default); font-size: 0.875rem;
+    }
+    .conc-table th { font-weight: 600; color: var(--fg-muted); font-size: 0.75rem; text-transform: uppercase; }
+
+    /* ── Actions ── */
+    .builder-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+    .notes-field { width: 100%; margin-top: 1rem; }
+    .notes-field textarea {
+        width: 100%; min-height: 60px; padding: 0.5rem;
+        border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+        font-size: 0.875rem; background: var(--bg-app); resize: vertical;
+    }
+    #save-status { margin-left: 0.5rem; font-size: 0.875rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="builder-wrap">
+    <h1>CSP Order Builder</h1>
+    <p class="subtitle">Add components, enter volumes drawn, and review the final product summary.</p>
+
+    <!-- ── Live summary ── -->
+    <div class="summary-strip">
+        <div class="metric">
+            <div class="value" id="total-volume">0</div>
+            <div class="label">Total Volume (mL)</div>
+        </div>
+        <div class="metric">
+            <div class="value" id="component-count">0</div>
+            <div class="label">Components</div>
+        </div>
+    </div>
+
+    <!-- ── Final concentrations card ── -->
+    <div class="card" id="conc-card" style="display:none;">
+        <h2>Final Concentrations</h2>
+        <table class="conc-table">
+            <thead><tr><th>Drug</th><th>Amount</th><th>Final Conc.</th></tr></thead>
+            <tbody id="conc-body"></tbody>
+        </table>
+    </div>
+
+    <!-- ── Component rows ── -->
+    <div class="component-list" id="component-list"></div>
+
+    <div style="margin-top:0.75rem;">
+        <button class="button" id="btn-add" type="button">＋ Add Component</button>
+    </div>
+
+    <div class="notes-field">
+        <label style="font-weight:600;">Notes</label>
+        <textarea id="notes" placeholder="Optional notes…"></textarea>
+    </div>
+
+    <div class="builder-actions">
+        <button class="button" id="btn-save" type="button">Save CSP Order</button>
+        <span id="save-status"></span>
+    </div>
+</div>
+
+<script>
+(function() {
+    const LIBRARY = {{ library_entries_json|safe }};
+    const list = document.getElementById("component-list");
+    let rowId = 0;
+
+    /* ── helpers ── */
+    function parseNum(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+    function optionsHtml() {
+        let html = '<option value="">— select component —</option>';
+        LIBRARY.forEach(e => {
+            html += `<option value="${e.id}">${e.label}</option>`;
+        });
+        return html;
+    }
+
+    function entryById(id) { return LIBRARY.find(e => e.id === id); }
+
+    /* ── recalculate everything ── */
+    function recalc() {
+        const rows = list.querySelectorAll(".component-row");
+        let totalVol = 0;
+        let count = 0;
+        // drug_key → { name, amount (mg etc.), unit }
+        const drugs = {};
+
+        rows.forEach(row => {
+            const sel = row.querySelector(".comp-select");
+            const volInput = row.querySelector(".vol-input");
+            const concDisp = row.querySelector(".conc-display");
+            const entryId = parseInt(sel.value);
+            const vol = parseNum(volInput.value);
+            if (!entryId) { concDisp.textContent = ""; return; }
+            const entry = entryById(entryId);
+            if (!entry) { concDisp.textContent = ""; return; }
+
+            totalVol += vol;
+            count++;
+
+            // concentration string from library (e.g. "10 mg/mL")
+            const conc = parseNum(entry.concentration);
+            const concUnit = entry.concentration_unit || "mg/mL";
+            if (conc && vol) {
+                const amount = conc * vol;
+                const key = entry.drug_name || entry.code;
+                if (!drugs[key]) drugs[key] = { name: key, amount: 0, unit: entry.strength_unit || "mg", concUnit };
+                drugs[key].amount += amount;
+                concDisp.textContent = `${amount.toFixed(2)} ${drugs[key].unit}`;
+            } else {
+                concDisp.textContent = "";
+            }
+        });
+
+        document.getElementById("total-volume").textContent = totalVol.toFixed(1);
+        document.getElementById("component-count").textContent = count;
+
+        // final concentrations table
+        const tbody = document.getElementById("conc-body");
+        const card = document.getElementById("conc-card");
+        const keys = Object.keys(drugs);
+        if (keys.length && totalVol > 0) {
+            card.style.display = "";
+            tbody.innerHTML = keys.map(k => {
+                const d = drugs[k];
+                const finalConc = d.amount / totalVol;
+                return `<tr>
+                    <td>${d.name}</td>
+                    <td>${d.amount.toFixed(2)} ${d.unit}</td>
+                    <td>${finalConc.toFixed(4)} ${d.concUnit}</td>
+                </tr>`;
+            }).join("");
+        } else {
+            card.style.display = "none";
+            tbody.innerHTML = "";
+        }
+    }
+
+    /* ── add a row ── */
+    function addRow() {
+        rowId++;
+        const div = document.createElement("div");
+        div.className = "component-row";
+        div.dataset.rowId = rowId;
+        div.innerHTML = `
+            <div class="field">
+                <label>Component</label>
+                <select class="comp-select">${optionsHtml()}</select>
+            </div>
+            <div class="field">
+                <label>Volume (mL)</label>
+                <input type="number" class="vol-input" step="0.001" min="0" placeholder="0.000">
+            </div>
+            <div class="field">
+                <label>Lot #</label>
+                <input type="text" class="lot-input" placeholder="lot">
+            </div>
+            <div class="field">
+                <label>Expiration</label>
+                <input type="date" class="exp-input">
+            </div>
+            <button type="button" class="btn-remove" title="Remove">✕</button>
+        `;
+        list.appendChild(div);
+
+        div.querySelector(".comp-select").addEventListener("change", recalc);
+        div.querySelector(".vol-input").addEventListener("input", recalc);
+        div.querySelector(".btn-remove").addEventListener("click", () => { div.remove(); recalc(); });
+        recalc();
+    }
+
+    document.getElementById("btn-add").addEventListener("click", addRow);
+
+    /* ── save ── */
+    document.getElementById("btn-save").addEventListener("click", () => {
+        const rows = list.querySelectorAll(".component-row");
+        const components = [];
+        rows.forEach(row => {
+            const entryId = parseInt(row.querySelector(".comp-select").value);
+            if (!entryId) return;
+            components.push({
+                library_entry_id: entryId,
+                volume_ml: parseNum(row.querySelector(".vol-input").value) || null,
+                lot_number: row.querySelector(".lot-input").value,
+                expiration: row.querySelector(".exp-input").value || null,
+            });
+        });
+        if (!components.length) {
+            document.getElementById("save-status").textContent = "⚠ Add at least one component.";
+            return;
+        }
+        const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
+        fetch("{% url 'cv:csp_builder_save' %}", {
+            method: "POST",
+            headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken},
+            body: JSON.stringify({ notes: document.getElementById("notes").value, components }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById("save-status").textContent = "❌ " + data.error;
+            } else {
+                document.getElementById("save-status").textContent = "✅ " + data.message;
+            }
+        })
+        .catch(() => {
+            document.getElementById("save-status").textContent = "❌ Network error";
+        });
+    });
+
+    // start with one empty row
+    addRow();
+})();
+</script>
+{% endblock %}

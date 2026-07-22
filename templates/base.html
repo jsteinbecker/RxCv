@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RxCv{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'rxocrpl/css/rxcv-base.css' %}">
+    <!-- fontawesome cdn -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--bg-sidebar);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header a {
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 1.5rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        footer {
+            background: var(--bg-app);
+            border-top: 1px solid var(--border-default);
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+        }
+
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-1);
+            margin-bottom: 1.5rem;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: var(--brand);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .button {
+            display: inline-block;
+            background: var(--brand);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .button:hover {
+            background: var(--teal-700);
+        }
+
+        .button-secondary {
+            background: var(--bg-app);
+            color: var(--fg-primary);
+            border: 1px solid var(--border-strong);
+        }
+
+        .button-secondary:hover {
+            background: var(--bg-row-hover);
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+<header>
+    <div class="logo">
+        <a href="/">Rx<span style="opacity: 0.5">·</span>Cv</a>
+    </div>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/cv/csp/builder/">CSP Builder</a></li>
+            <li><a href="/rxocrpl/">RxOCR Pipeline</a></li>
+            <li><a href="/admin/">Admin</a></li>
+        </ul>
+    </nav>
+</header>
+
+<main>
+    {% block content %}{% endblock %}
+</main>
+
+<footer>
+    &copy; 2026 RxCv System
+</footer>
+</body>
+</html>

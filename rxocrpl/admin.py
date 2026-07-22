@@ -2,27 +2,28 @@ from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
 
+from .enrichment_service import sync_product_from_external_sources
 from .models import (
-      Labeler,
-      RxNormConcept,
-      RxNormConceptRelation,
-      Product,
-      PackagedProduct,
-      ListedIngredient,
-      Organization,
-      Role,
+      ApprovedProductReconstitutionScheme,
+      ClinicalDrug,
+      Component,
+      CspOrder,
       Facility,
+      Labeler,
+      ListedIngredient,
+      OCRFields,
+      Organization,
+      PackagedProduct,
+      Product,
+      ProductRxNormMapping,
+      Role,
       RoleGrant,
       RoleGrantEvent,
-      CspOrder,
+      RxNormConcept,
+      RxNormConceptRelation,
+      User,
       VerificationImage,
-      Component,
-      OCRFields,
-      ApprovedProductReconstitutionScheme,
-      ProductRxNormMapping,
-      ClinicalDrug,
 )
-from .enrichment_service import sync_product_from_external_sources
 
 admin.site.register(RxNormConceptRelation)
 admin.site.register(Role)
@@ -50,6 +51,11 @@ class OrganizationAdmin(admin.ModelAdmin):
       inlines = [FacilityInline, OrganizationRoleGrantInline]
 
 
+class UserInline(admin.TabularInline):
+      model = User
+      extra = 0
+
+
 class FacilityRoleGrantInline(admin.TabularInline):
       model = RoleGrant
       extra = 0
@@ -63,7 +69,7 @@ class FacilityAdmin(admin.ModelAdmin):
       list_display = ["name", "organization", "parent", "facility_type", "admin_count", "has_admins"]
       list_filter = ["organization", "facility_type"]
       search_fields = ["name"]
-      inlines = [FacilityRoleGrantInline]
+      inlines = [UserInline, FacilityRoleGrantInline]
       actions = ["claim_as_admin"]
 
       @admin.display(description="Admins", ordering="name")
@@ -81,24 +87,29 @@ class FacilityAdmin(admin.ModelAdmin):
                   if facility.current_admins.exists():
                         skipped.append(f"{facility} (already has admins)")
                         continue
-                  if request.user.facility_id and request.user.facility_id != facility.pk:
-                        skipped.append(f"{facility} (you are assigned to a different facility)")
-                        continue
-                  if not request.user.facility_id:
-                        request.user.facility = facility
-                        request.user.save(update_fields=["facility"])
+                  try:
+                        rx_user = request.user.facility_profile
+                        if rx_user.facility_id != facility.pk:
+                              skipped.append(f"{facility} (you are assigned to a different facility)")
+                              continue
+                  except AttributeError:
+                        rx_user = User.objects.create(
+                              auth_user=request.user,
+                              name=request.user.get_full_name() or request.user.username,
+                              facility=facility,
+                        )
                   role, _ = Role.objects.get_or_create(
                         name="facility_admin",
                         defaults={"description": "Facility administrator"},
                   )
                   already = RoleGrant.objects.filter(
-                        user=request.user, facility=facility, role=role, revoked_at__isnull=True
+                        user=rx_user, facility=facility, role=role, revoked_at__isnull=True
                   ).exists()
                   if already:
                         claimed.append(f"{facility} (already your facility)")
                         continue
                   grant = RoleGrant(
-                        user=request.user,
+                        user=rx_user,
                         role=role,
                         facility=facility,
                         granted_by=None,
@@ -111,6 +122,36 @@ class FacilityAdmin(admin.ModelAdmin):
                   self.message_user(request, f"Claimed admin for: {', '.join(claimed)}")
             if skipped:
                   self.message_user(request, f"Skipped: {', '.join(skipped)}", level=messages.WARNING)
+
+
+class RoleGrantInline(admin.TabularInline):
+      model = RoleGrant
+      extra = 0
+      fk_name = "user"
+      readonly_fields = ["granted_at"]
+      fields = [
+            "role",
+            "organization",
+            "facility",
+            "granted_by",
+            "reason",
+            "granted_at",
+            "revoked_at",
+            "expires_at",
+      ]
+
+
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+      list_display = ["name", "auth_user", "facility", "user_type", "is_admin"]
+      list_filter = ["facility", "user_type"]
+      search_fields = ["name", "auth_user__username", "auth_user__email"]
+      raw_id_fields = ["auth_user"]
+      inlines = [RoleGrantInline]
+
+      @admin.display(boolean=True, description="Admin")
+      def is_admin (self, obj) -> bool:
+            return obj.is_admin
 
 
 class RoleGrantEventInline(admin.TabularInline):
@@ -208,6 +249,7 @@ class InlinePackages(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+      autocomplete_fields = ["concepts"]
       list_display = [
             "brand_name",
             "generic_name",
@@ -222,24 +264,32 @@ class ProductAdmin(admin.ModelAdmin):
             return super().get_queryset(request).filter(active=True)
 
       fieldsets = (
-            (
-                  None,
-                  {
-                        "fields": (
-                              "brand_name", "generic_name", "product_ndc", "dosage_form", "as_substance", "sync_button",
-                        )
-                  },
-            ),
+            (None, {"fields": ("brand_name", "generic_name", "product_ndc", "dosage_form", "as_substance", "sync_button",)},),
             ("Labeler", {"fields": ("labeler", "labeler_name")}),
             ("Stats", {"fields": ("ingredient_count", "package_count")}),
+            ("Concepts", {"fields": ("concepts",)}),
       )
       readonly_fields = [
-            "ingredient_count", "package_count", "as_substance", "sync_button",
+            "ingredient_count", "package_count", "as_substance", "sync_button", "labeler"
       ]
 
-      inlines = [InlineIngredient, InlinePackages]
+      inlines = [
+            InlineIngredient, InlinePackages
+      ]
       search_fields = ["brand_name", "generic_name", "product_ndc"]
       actions = ["enrich_from_outside_sources"]
+
+      class Media:
+            js = ("rxocrpl/admin/concept_autocomplete_links.js",)
+
+      def formfield_for_manytomany (self, db_field, request, **kwargs):
+            formfield = super().formfield_for_manytomany(db_field, request, **kwargs)
+            if db_field.name == "concepts" and formfield:
+                  formfield.widget.attrs["data-change-url-template"] = reverse(
+                        "admin:rxocrpl_rxnormconcept_change",
+                        args=["__value__"],
+                  )
+            return formfield
 
       @admin.action(description="Enrich from Outside Sources")
       def enrich_from_outside_sources (self, request, queryset):
@@ -376,51 +426,11 @@ class LabelerAdmin(admin.ModelAdmin):
 
 @admin.register(RxNormConcept)
 class RxNormConceptAdmin(admin.ModelAdmin):
-      list_display = ["rxcui", "name", "tty", "hierarchy_link"]
+      list_display = ["rxid", "name", "tty"]
       search_fields = ["rxcui", "name", "tty"]
       list_filter = ["tty"]
-      sortable_by = ["rxcui", "name", "tty"]
-      readonly_fields = ["hierarchy_link"]
+      sortable_by = ["rxid", "name", "tty"]
 
-      def view_on_site (self, obj):
-            return reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[obj.rxcui])
-
-      def get_urls (self):
-            from django.urls import path
-
-            urls = super().get_urls()
-            custom_urls = [
-                  path(
-                        "<path:rxcui>/hierarchy/",
-                        self.admin_site.admin_view(self.hierarchy_view),
-                        name="rxocrpl_rxnormconcept_hierarchy",
-                  ),
-            ]
-            return custom_urls + urls
-
-      def hierarchy_view (self, request, rxcui):
-            from django.shortcuts import get_object_or_404, render
-
-            from .rxgraph.hierarchy import build_hierarchy
-
-            concept = get_object_or_404(RxNormConcept, rxcui=rxcui)
-            context = {
-                  **self.admin_site.each_context(request),
-                  **build_hierarchy(concept),
-                  "title": f"Hierarchy · {concept.name or concept.rxcui}",
-                  "opts": self.model._meta,
-                  "cytoscape_url": reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
-                  "change_url": reverse(
-                        "admin:rxocrpl_rxnormconcept_change", args=[concept.rxcui]
-                  ),
-            }
-            return render(request, "admin/rxocrpl/rxnormconcept/hierarchy.html", context)
-
-      @admin.display(description="Hierarchy")
-      def hierarchy_link (self, obj):
-            from django.utils.html import format_html
-
-            if not obj.pk:
-                  return ""
-            url = reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[obj.pk])
-            return format_html('<a class="button" href="{}">View hierarchy</a>', url)
+      @staticmethod
+      def view_on_site (obj):
+            return reverse("rxocrpl:concept_graph", args=[obj.rxcui])

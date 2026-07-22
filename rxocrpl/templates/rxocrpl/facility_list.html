@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Facilities – RxCv{% endblock %}
+
+{% block content %}
+<h1>Facilities</h1>
+
+{% if facility_data %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="background:var(--bg-sidebar);color:white;">
+      <th style="padding:.6rem 1rem;text-align:left;">Facility</th>
+      <th style="padding:.6rem 1rem;text-align:left;">Organization</th>
+      <th style="padding:.6rem 1rem;text-align:left;">Type</th>
+      <th style="padding:.6rem 1rem;text-align:left;">Admins</th>
+      <th style="padding:.6rem 1rem;"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in facility_data %}
+    <tr style="border-bottom:1px solid var(--border-default);">
+      <td style="padding:.6rem 1rem;">{{ item.facility.name }}</td>
+      <td style="padding:.6rem 1rem;">{{ item.facility.organization|default:"—" }}</td>
+      <td style="padding:.6rem 1rem;">{{ item.facility.facility_type|default:"—" }}</td>
+      <td style="padding:.6rem 1rem;">
+        {% if item.is_unclaimed %}
+          <span style="color:var(--fg-muted);">None</span>
+        {% else %}
+          {% for admin in item.admins %}{{ admin }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% endif %}
+      </td>
+      <td style="padding:.6rem 1rem;">
+        {% if item.is_unclaimed and user.is_authenticated %}
+          <a class="button" href="{% url 'rxocrpl:facility_claim' item.facility.pk %}">Claim</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No facilities have been created yet. <a href="/admin/rxocrpl/facility/add/">Add one in the admin.</a></p>
+{% endif %}
+{% endblock %}

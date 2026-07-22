@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ labeler.name }} · RxCv{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .breadcrumb { font-size: 0.85rem; color: var(--fg-muted); margin-bottom: 1rem; }
+        .breadcrumb a { color: var(--brand); text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
+        th { background: var(--bg-app); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-secondary); }
+        tr:hover td { background: var(--bg-row-hover); }
+        .ndc-code { font-family: var(--font-mono); font-size: 0.85rem; color: var(--fg-secondary); }
+        .dosage-badge {
+            display: inline-block; font-size: 0.75rem; padding: 1px 6px;
+            border-radius: 3px; background: var(--bg-app);
+            border: 1px solid var(--border-default); color: var(--fg-secondary);
+        }
+        .pagination { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; font-size: 0.9rem; }
+        .pagination a { color: var(--brand); text-decoration: none; padding: 4px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+        .pagination a:hover { background: var(--bg-row-hover); }
+        .pagination .current { padding: 4px 8px; color: var(--fg-secondary); }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="breadcrumb">
+        <a href="{% url 'rxocrpl:index' %}">RxOCR Pipeline</a> &rsaquo;
+        <a href="{% url 'rxocrpl:labeler_list' %}">Labelers</a> &rsaquo;
+        {{ labeler.name }}
+    </div>
+
+    <div class="card">
+        <h1 style="margin: 0;">{{ labeler.name }}</h1>
+        {% if labeler.verbose_name %}
+            <p style="margin: 0.25rem 0; color: var(--fg-secondary);">{{ labeler.verbose_name }}</p>
+        {% endif %}
+        <p style="margin: 0.5rem 0 0; color: var(--fg-muted); font-size: 0.9rem;">
+            Labeler code: <span style="font-family: var(--font-mono);">{{ labeler.labeler_code }}</span>
+            &nbsp;·&nbsp; {{ page_obj.paginator.count }} product{{ page_obj.paginator.count|pluralize }}
+        </p>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Generic Name</th>
+                    <th>Brand Name</th>
+                    <th>Dosage Form</th>
+                    <th>NDC</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in page_obj %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'rxocrpl:ndc_product_detail' product.product_ndc %}" style="font-weight: 500;">
+                                {{ product.generic_name }}
+                            </a>
+                        </td>
+                        <td style="color: var(--fg-secondary);">{{ product.brand_name|default:"—" }}</td>
+                        <td><span class="dosage-badge">{{ product.dosage_form|default:"—" }}</span></td>
+                        <td><span class="ndc-code">{{ product.product_ndc }}</span></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" style="text-align: center; color: var(--fg-muted); padding: 2rem;">No products found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+        <span class="current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+        {% endif %}
+    </div>
+{% endblock %}

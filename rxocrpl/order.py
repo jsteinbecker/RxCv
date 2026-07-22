@@ -3,44 +3,62 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List, Dict, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 try:
-      from .fda import lookup_ndc_package, lookup_generic_name, parse_product
-      from .pipeline import Pipeline, PipelineResult
       from .detection.process_inference import (
             ProcessInferenceManager,
             ProcessInferenceResult,
       )
-      from .quantities import (Quantity, PhysicalQuantity, DimensionalityError, mcg, mg, g, kg, mL, L, mmol, mol, mEq, units, percent, each)
-      from .models import Product, Component, CspOrder as OrderModel
+      from .fda import lookup_generic_name, lookup_ndc_package, parse_product
+      from .models import Component, Product
+      from .models import CspOrder as OrderModel
+      from .pipeline import Pipeline, PipelineResult
+      from .quantities import (
+            DimensionalityError,
+            L,
+            PhysicalQuantity,
+            Quantity,
+            each,
+            g,
+            kg,
+            mcg,
+            mEq,
+            mg,
+            mL,
+            mmol,
+            mol,
+            percent,
+            units,
+      )
 except ImportError:
-      from rxocrpl.fda import lookup_ndc_package, lookup_generic_name
-      from rxocrpl.pipeline import Pipeline, PipelineResult
       from rxocrpl.detection.process_inference import (
             ProcessInferenceManager,
             ProcessInferenceResult,
       )
+      from rxocrpl.fda import lookup_generic_name, lookup_ndc_package
+      from rxocrpl.pipeline import Pipeline, PipelineResult
       from rxocrpl.quantities import (
-            Quantity,
-            PhysicalQuantity,
             DimensionalityError,
-            mcg,
-            mg,
+            L,
+            PhysicalQuantity,
+            Quantity,
+            each,
             g,
             kg,
+            mcg,
+            mEq,
+            mg,
             mL,
-            L,
             mmol,
             mol,
-            mEq,
-            units,
             percent,
-            each,
+            units,
       )
 
       try:
-            from rxocrpl.models import Product, Component, CspOrder as OrderModel
+            from rxocrpl.models import Component, Product
+            from rxocrpl.models import CspOrder as OrderModel
       except ImportError:
             raise ImportError(
                   "rxocrpl.models is not available; please ensure the models module is installed and accessible."

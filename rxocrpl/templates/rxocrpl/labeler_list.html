@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Labelers · RxCv{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .breadcrumb { font-size: 0.85rem; color: var(--fg-muted); margin-bottom: 1rem; }
+        .breadcrumb a { color: var(--brand); text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
+        th { background: var(--bg-app); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-secondary); }
+        tr:hover td { background: var(--bg-row-hover); }
+        .code { font-family: var(--font-mono); font-size: 0.85rem; color: var(--fg-secondary); }
+        .pagination { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; font-size: 0.9rem; }
+        .pagination a { color: var(--brand); text-decoration: none; padding: 4px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+        .pagination a:hover { background: var(--bg-row-hover); }
+        .pagination .current { padding: 4px 8px; color: var(--fg-secondary); }
+        .search-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .search-form input[type="text"] {
+            flex: 1; max-width: 320px; padding: 8px 12px;
+            border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+            background: var(--bg-app); color: var(--fg-primary); font-size: 0.9rem;
+        }
+        .search-form input[type="text"]:focus { outline: none; border-color: var(--brand); }
+        .search-form button {
+            padding: 8px 16px; border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm); background: var(--brand);
+            color: #fff; font-size: 0.9rem; cursor: pointer;
+        }
+        .search-form button:hover { opacity: 0.9; }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="breadcrumb">
+        <a href="{% url 'rxocrpl:index' %}">RxOCR Pipeline</a> &rsaquo; Labelers
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <h1 style="margin: 0;">Labelers</h1>
+            <span style="color: var(--fg-muted); font-size: 0.9rem;">{{ page_obj.paginator.count }} active</span>
+        </div>
+        <p style="margin: 0.5rem 0 0;">FDA drug labelers. See <a href="{% url 'rxocrpl:ndc_product_list' %}">all products</a> or filter by labeler below.</p>
+    </div>
+
+    <div class="card">
+        <form method="get" class="search-form">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search name or labeler code…">
+            <button type="submit">Search</button>
+            {% if query %}<a href="?" style="align-self: center; font-size: 0.85rem; color: var(--fg-muted);">Clear</a>{% endif %}
+        </form>
+        {% if query %}
+            <p style="margin: 0 0 0.75rem; font-size: 0.9rem; color: var(--fg-muted);">
+                {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for "<strong>{{ query }}</strong>"
+            </p>
+        {% endif %}
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Labeler Code</th>
+                    <th>Name</th>
+                    <th>Verbose Name</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for labeler in page_obj %}
+                    <tr>
+                        <td><span class="code">{{ labeler.labeler_code }}</span></td>
+                        <td>
+                            <a href="{% url 'rxocrpl:labeler_detail' labeler.labeler_code %}" style="font-weight: 500;">
+                                {{ labeler.name }}
+                            </a>
+                        </td>
+                        <td style="color: var(--fg-secondary);">{{ labeler.verbose_name|default:"—" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="3" style="text-align: center; color: var(--fg-muted); padding: 2rem;">No labelers found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?page=1{% if query %}&q={{ query }}{% endif %}">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}">Previous</a>
+        {% endif %}
+        <span class="current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}">Last &raquo;</a>
+        {% endif %}
+    </div>
+{% endblock %}

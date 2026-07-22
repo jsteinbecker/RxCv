@@ -69,9 +69,8 @@ class DoseForm(models.TextChoices):
       SUPPOSITORY = "suppository", "Suppository"
 
 
-class RxNormConcept(models.Model, RxConceptTraversalMixin):
+class RxNormConcept(RxConceptTraversalMixin, ComputedFieldsModel):
       """RxNorm concept mapping."""
-
       rxcui = models.CharField(max_length=20, primary_key=True)
       name = models.CharField(max_length=255, null=True, blank=True)
       tty = models.CharField(max_length=10, choices=TermType.choices, null=True, blank=True)
@@ -79,6 +78,9 @@ class RxNormConcept(models.Model, RxConceptTraversalMixin):
       attributes = models.JSONField(default=dict, blank=True)
       synced_at = models.DateTimeField(auto_now=True)
       rxnorm_release = models.CharField(max_length=20, null=True, blank=True)
+      rxid = ComputedField(models.PositiveIntegerField(null=True, blank=True),
+                           lambda self: int(self.rxcui) if self.rxcui and self.rxcui.isdigit() else None,
+                           depends=[("rxcui", [])], )
 
       class Meta:
             app_label = "rxocrpl"
@@ -173,6 +175,7 @@ class Product(ComputedFieldsModel):
                                        depends=[("active_ingredients", [])], compute=lambda self: len(self.active_ingredients))
       rxcui_mapping = models.JSONField(default=dict)  # Mapping of NDC to RxCUI info
       active = models.BooleanField(default=True)
+      concepts = models.ManyToManyField(RxNormConcept, related_name="products")
 
       def __str__ (self):
             if self.as_substance():
