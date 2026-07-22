@@ -409,11 +409,51 @@ class LabelerAdmin(admin.ModelAdmin):
 
 @admin.register(RxNormConcept)
 class RxNormConceptAdmin(admin.ModelAdmin):
-      list_display = ["rxid", "name", "tty"]
+      list_display = ["rxid", "name", "tty", "hierarchy_link"]
       search_fields = ["rxcui", "name", "tty"]
       list_filter = ["tty"]
       sortable_by = ["rxid", "name", "tty"]
+      readonly_fields = ["hierarchy_link"]
 
-      @staticmethod
-      def view_on_site (obj):
-            return reverse("rxocrpl:concept_graph", args=[obj.rxcui])
+      def view_on_site (self, obj):
+            return reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[obj.rxcui])
+
+      def get_urls (self):
+            from django.urls import path
+
+            urls = super().get_urls()
+            custom_urls = [
+                  path(
+                        "<path:rxcui>/hierarchy/",
+                        self.admin_site.admin_view(self.hierarchy_view),
+                        name="rxocrpl_rxnormconcept_hierarchy",
+                  ),
+            ]
+            return custom_urls + urls
+
+      def hierarchy_view (self, request, rxcui):
+            from django.shortcuts import get_object_or_404, render
+
+            from .rxgraph.hierarchy import build_hierarchy
+
+            concept = get_object_or_404(RxNormConcept, rxcui=rxcui)
+            context = {
+                  **self.admin_site.each_context(request),
+                  **build_hierarchy(concept),
+                  "title": f"Hierarchy · {concept.name or concept.rxcui}",
+                  "opts": self.model._meta,
+                  "cytoscape_url": reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
+                  "change_url": reverse(
+                        "admin:rxocrpl_rxnormconcept_change", args=[concept.rxcui]
+                  ),
+            }
+            return render(request, "admin/rxocrpl/rxnormconcept/hierarchy.html", context)
+
+      @admin.display(description="Hierarchy")
+      def hierarchy_link (self, obj):
+            from django.utils.html import format_html
+
+            if not obj.pk:
+                  return ""
+            url = reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[obj.pk])
+            return format_html('<a class="button" href="{}">View hierarchy</a>', url)
