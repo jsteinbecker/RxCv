@@ -4,8 +4,8 @@ from django.urls import reverse
 
 from .enrichment_service import sync_product_from_external_sources
 from .models import (
+      User,
       ApprovedProductReconstitutionScheme,
-      ClinicalDrug,
       Component,
       CspOrder,
       Facility,
@@ -113,6 +113,36 @@ class FacilityAdmin(admin.ModelAdmin):
                   self.message_user(request, f"Skipped: {', '.join(skipped)}", level=messages.WARNING)
 
 
+class RoleGrantInline(admin.TabularInline):
+      model = RoleGrant
+      extra = 0
+      fk_name = "user"
+      readonly_fields = ["granted_at"]
+      fields = [
+            "role",
+            "organization",
+            "facility",
+            "granted_by",
+            "reason",
+            "granted_at",
+            "revoked_at",
+            "expires_at",
+      ]
+
+
+# @admin.register(User)
+# class UserAdmin(admin.ModelAdmin):
+#       list_display = ["name", "auth_user", "facility", "user_type", "is_admin"]
+#       list_filter = ["facility", "user_type"]
+#       search_fields = ["name", "auth_user__username", "auth_user__email"]
+#       raw_id_fields = ["auth_user"]
+#       inlines = [RoleGrantInline]
+#
+#       @admin.display(boolean=True, description="Admin")
+#       def is_admin (self, obj) -> bool:
+#             return obj.is_admin
+
+
 class RoleGrantEventInline(admin.TabularInline):
       model = RoleGrantEvent
       extra = 0
@@ -186,12 +216,6 @@ class CspOrderAdmin(admin.ModelAdmin):
 class ApprovedProductReconstitutionSchemeAdmin(admin.ModelAdmin):
       list_display = ["facility", "user", "whole_product_strength"]
       list_filter = ["facility", "user"]
-
-
-@admin.register(ClinicalDrug)
-class ClinicalDrugAdmin(admin.ModelAdmin):
-      list_display = ["concept", "route", "quantified"]
-      readonly_fields = ["route", "quantified"]
 
 
 class InlineIngredient(admin.TabularInline):

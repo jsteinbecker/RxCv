@@ -1,3 +1,6 @@
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AbstractUser
+
 from rxocrpl.rxnorm.parser import parse_rxnorm_string, RxNormParts
 import re
 from typing import Any
@@ -14,6 +17,65 @@ from .quantities import Quantity
 from .rxgraph.traversal import RxConceptTraversalMixin
 from .substance import SubstanceQuantity, Substance
 from .dailymed import get_dailymed_url
+
+
+class User(AbstractUser):
+      """Pharmacy staff. is_rph distinguishes pharmacists (who can verify) from techs."""
+      USERNAME_FIELD = "username"
+      username = models.CharField(max_length=150, unique=True)
+      first_name = models.CharField(max_length=150)
+      last_name = models.CharField(max_length=150)
+      email = models.EmailField(unique=True)
+      is_rph = models.BooleanField(default=False)
+      facility = models.ForeignKey("Facility", on_delete=models.SET_NULL, null=True, blank=True, related_name="users", )
+      user_type = models.CharField(max_length=100, null=True, blank=True)
+
+      def has_role (self, role_name: str, facility=None, organization=None) -> bool:
+            """
+            Check if user holds an active grant for the role at the given scope,
+            considering hierarchy inheritance.
+            """
+            from rxocrpl.models import RoleGrant
+
+            now = timezone.now()
+            base_qs = RoleGrant.objects.filter(
+                  user=self, role__name=role_name, revoked_at__isnull=True
+            ).exclude(expires_at__lt=now)
+
+            if organization:
+                  if base_qs.filter(organization=organization).exists():
+                        return True
+
+            if facility:
+                  if base_qs.filter(facility=facility).exists():
+                        return True
+
+                  curr = facility.parent
+                  while curr:
+                        if base_qs.filter(facility=curr).exists():
+                              return True
+                        curr = curr.parent
+
+                  if facility.organization:
+                        if base_qs.filter(organization=facility.organization).exists():
+                              return True
+
+            return False
+
+      @property
+      def is_admin (self) -> bool:
+            """Returns True if the user has any active admin grant."""
+            from rxocrpl.models import RoleGrant
+
+            return (
+                  RoleGrant.objects.filter(
+                        user=self,
+                        role__name__in=["org_admin", "facility_admin"],
+                        revoked_at__isnull=True,
+                  )
+                  .exclude(expires_at__lt=timezone.now())
+                  .exists()
+            )
 
 
 class TermType(models.TextChoices):
@@ -132,20 +194,6 @@ def check_quantified_form (name):
             except pint.errors.DimensionalityError:
                   return False
       return False
-
-
-class ClinicalDrug(ComputedFieldsModel):
-      """RxNorm SCD/SCDC concept details."""
-
-      concept = models.ForeignKey(RxNormConcept, on_delete=models.CASCADE, primary_key=True,
-                                  limit_choices_to={"tty": ["SCD", "SBD"]}, )
-      route = ComputedField(models.CharField(max_length=20, choices=RouteOfAdministration.choices),
-                            compute=lambda self: self.concept.attributes.get("route", None), depends=[("concept", ["attributes"])])
-      quantified = ComputedField(models.BooleanField(default=False),
-                                 depends=[("concept", ["name"])], compute=lambda self: check_quantified_form(self.concept.name))
-
-      def __str__ (self):
-            return f"{self.concept.name} ({self.concept.rxcui})"
 
 
 class Labeler(models.Model):
@@ -592,7 +640,7 @@ class RoleGrant(models.Model):
       A new record per permission change, never edited or deleted, only closed out.
       """
 
-      user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="role_grants")
+      user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="role_grants")
       role = models.ForeignKey(Role, on_delete=models.CASCADE)
 
       # Scope: org_id OR facility_id, never both (enforce via check constraint / clean())
@@ -604,7 +652,7 @@ class RoleGrant(models.Model):
       )
 
       granted_by = models.ForeignKey(
-            settings.AUTH_USER_MODEL,
+            User,
             on_delete=models.SET_NULL,
             null=True,
             blank=True,
@@ -613,7 +661,7 @@ class RoleGrant(models.Model):
       granted_at = models.DateTimeField(auto_now_add=True)
 
       revoked_by = models.ForeignKey(
-            settings.AUTH_USER_MODEL,
+            User,
             on_delete=models.SET_NULL,
             null=True,
             blank=True,
@@ -728,7 +776,7 @@ class RoleGrantEvent(models.Model):
             max_length=50
       )  # e.g., 'denied_attempt', 'auto_expiry', 'annotation'
       timestamp = models.DateTimeField(auto_now_add=True)
-      actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+      actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
       notes = models.TextField(blank=True)
 
       class Meta:
@@ -743,7 +791,7 @@ class ApprovedProductReconstitutionScheme(models.Model):
 
       product_ndcs = models.JSONField(default=list)  # List of NDCs this scheme applies to
       facility = models.ForeignKey(Facility, on_delete=models.CASCADE)
-      user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+      user = models.ForeignKey(User, on_delete=models.CASCADE)
       whole_product_strength_mag = models.DecimalField(max_digits=12, decimal_places=4)
       whole_product_strength_unit = models.CharField(max_length=20)
       approved_diluents = models.JSONField(default=list)

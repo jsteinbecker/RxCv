@@ -11,7 +11,7 @@ except ImportError:
 from django.db.models import Q, Count
 
 
-def rec (x):
+def rec (x) -> re.Pattern:
       return re.compile(r".*" + re.escape(x) + r".*", re.IGNORECASE)
 
 
@@ -247,8 +247,24 @@ def move_rxcui_mappings_to_concepts_m2m ():
       # Get all products with an RxCUI mapping
       products_with_rxcui = Product.objects.filter(rxcui_mapping__isnull=False)
 
-      # format: {"rxcui": {"concept": [["2740417", "SCD"]], "drug": [["2740417", "SCD"]], "product": [["2740417", "SCD"]]}, "concept": "<2740417 [SCD]> Capsicum extract 0.005 MG/MG / menthol 0.1 MG/MG Medicated Patch", "concept_rxcui": "2740417", "status": null, "scdc_group": ["2740416", "384557"], "volume_group_key": null, "labeler": {"code": "87502", "name": "Sheng Chang Pharmaceutical Co Ltd Zhongli Factory", "full_name": "Sheng Chang Pharmaceutical Co, Ltd. Zhongli Factory", "source": "local", "codes": ["87502"], "active_rx_product_count": 2, "active_ndc_product_count": 2, "in_rxnorm": true}}
-      # get stuff at rxcui.concept.0.0, rxcui.drug.0.0, rxcui.product.0.0, and rxcui.concept_rxcui
+      # format: {"rxcui":
+      #            {"concept": [["2740417", "SCD"]],
+      #             "drug": [["2740417", "SCD"]],
+      #             "product": [["2740417", "SCD"]]},
+      #         "concept": "<2740417 [SCD]> Capsicum extract 0.005 MG/MG / menthol 0.1 MG/MG Medicated Patch",
+      #         "concept_rxcui": "2740417",
+      #         "status": null,
+      #         "scdc_group": ["2740416", "384557"],
+      #         "volume_group_key": null,
+      #         "labeler": {"code": "87502",
+      #         "name": "Sheng Chang Pharmaceutical Co Ltd Zhongli Factory",
+      #         "full_name": "Sheng Chang Pharmaceutical Co, Ltd. Zhongli Factory",
+      #         "source": "local",
+      #         "codes": ["87502"],
+      #         "active_rx_product_count": 2,
+      #         "active_ndc_product_count": 2,
+      #         "in_rxnorm": true}
+      #        }
       for product in products_with_rxcui:
             rxcui_data = product.rxcui_mapping
             concept_rxcui = rxcui_data.get("concept_rxcui")

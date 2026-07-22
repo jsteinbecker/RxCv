@@ -148,7 +148,7 @@
             <tr>
                 <td>
                     <a href="{% url 'rxocrpl:ndc_product_detail' product.product_ndc %}">
-                        {{ product.as_substance }}
+                        {{ product.as_substance|default:product.generic_name }}
                     </a>
                 </td>
                 <td>

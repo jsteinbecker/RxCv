@@ -38,7 +38,7 @@ INSTALLED_APPS = [
       'django.contrib.messages',
       'django.contrib.staticfiles',
       'rest_framework',
-      'cv.apps.CvConfig',
+      # 'cv.apps.CvConfig',
       'rxocrpl.apps.RxOcrPlConfig'
 ]
 
@@ -111,7 +111,7 @@ USE_I18N = True
 
 USE_TZ = True
 
-AUTH_USER_MODEL = 'cv.User'
+AUTH_USER_MODEL = 'rxocrpl.User'
 LOGIN_URL = '/admin/login/'
 
 # Static files (CSS, JavaScript, Images)

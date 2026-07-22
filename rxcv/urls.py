@@ -23,5 +23,5 @@ urlpatterns = [
       path('grappelli/', include('grappelli.urls')),
       path('admin/', admin.site.urls),
       path('rxocrpl/', include('rxocrpl.urls')),
-      path('cv/', include('cv.urls')),
+      # path('cv/', include('cv.urls')),
 ]
