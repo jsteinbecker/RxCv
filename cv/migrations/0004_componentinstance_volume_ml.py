@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('cv', '0002_remove_labelercode_labeler_code_format_and_more'),
+        ('cv', '0003_user_facility_user_type'),
     ]
 
     operations = [

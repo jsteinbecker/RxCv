@@ -21,7 +21,6 @@ from .models import (
       RoleGrantEvent,
       RxNormConcept,
       RxNormConceptRelation,
-      User,
       VerificationImage,
 )
 
@@ -51,11 +50,6 @@ class OrganizationAdmin(admin.ModelAdmin):
       inlines = [FacilityInline, OrganizationRoleGrantInline]
 
 
-class UserInline(admin.TabularInline):
-      model = User
-      extra = 0
-
-
 class FacilityRoleGrantInline(admin.TabularInline):
       model = RoleGrant
       extra = 0
@@ -69,7 +63,7 @@ class FacilityAdmin(admin.ModelAdmin):
       list_display = ["name", "organization", "parent", "facility_type", "admin_count", "has_admins"]
       list_filter = ["organization", "facility_type"]
       search_fields = ["name"]
-      inlines = [UserInline, FacilityRoleGrantInline]
+      inlines = [FacilityRoleGrantInline]
       actions = ["claim_as_admin"]
 
       @admin.display(description="Admins", ordering="name")
@@ -87,29 +81,24 @@ class FacilityAdmin(admin.ModelAdmin):
                   if facility.current_admins.exists():
                         skipped.append(f"{facility} (already has admins)")
                         continue
-                  try:
-                        rx_user = request.user.facility_profile
-                        if rx_user.facility_id != facility.pk:
-                              skipped.append(f"{facility} (you are assigned to a different facility)")
-                              continue
-                  except AttributeError:
-                        rx_user = User.objects.create(
-                              auth_user=request.user,
-                              name=request.user.get_full_name() or request.user.username,
-                              facility=facility,
-                        )
+                  if request.user.facility_id and request.user.facility_id != facility.pk:
+                        skipped.append(f"{facility} (you are assigned to a different facility)")
+                        continue
+                  if not request.user.facility_id:
+                        request.user.facility = facility
+                        request.user.save(update_fields=["facility"])
                   role, _ = Role.objects.get_or_create(
                         name="facility_admin",
                         defaults={"description": "Facility administrator"},
                   )
                   already = RoleGrant.objects.filter(
-                        user=rx_user, facility=facility, role=role, revoked_at__isnull=True
+                        user=request.user, facility=facility, role=role, revoked_at__isnull=True
                   ).exists()
                   if already:
                         claimed.append(f"{facility} (already your facility)")
                         continue
                   grant = RoleGrant(
-                        user=rx_user,
+                        user=request.user,
                         role=role,
                         facility=facility,
                         granted_by=None,
@@ -122,36 +111,6 @@ class FacilityAdmin(admin.ModelAdmin):
                   self.message_user(request, f"Claimed admin for: {', '.join(claimed)}")
             if skipped:
                   self.message_user(request, f"Skipped: {', '.join(skipped)}", level=messages.WARNING)
-
-
-class RoleGrantInline(admin.TabularInline):
-      model = RoleGrant
-      extra = 0
-      fk_name = "user"
-      readonly_fields = ["granted_at"]
-      fields = [
-            "role",
-            "organization",
-            "facility",
-            "granted_by",
-            "reason",
-            "granted_at",
-            "revoked_at",
-            "expires_at",
-      ]
-
-
-@admin.register(User)
-class UserAdmin(admin.ModelAdmin):
-      list_display = ["name", "auth_user", "facility", "user_type", "is_admin"]
-      list_filter = ["facility", "user_type"]
-      search_fields = ["name", "auth_user__username", "auth_user__email"]
-      raw_id_fields = ["auth_user"]
-      inlines = [RoleGrantInline]
-
-      @admin.display(boolean=True, description="Admin")
-      def is_admin (self, obj) -> bool:
-            return obj.is_admin
 
 
 class RoleGrantEventInline(admin.TabularInline):

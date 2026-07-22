@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('rxocrpl', '0017_backfill_facility_state'),
+        ('rxocrpl', '0011_product_ingredient_count'),
     ]
 
     operations = [

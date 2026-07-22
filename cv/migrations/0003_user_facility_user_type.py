@@ -6,7 +6,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('cv', '0002_remove_labelercode_labeler_code_format_and_more'),
-        ('rxocrpl', '0017_backfill_facility_state'),
+        ('rxocrpl', '0008_facility_productrxnormmapping_and_more'),
     ]
 
     operations = [

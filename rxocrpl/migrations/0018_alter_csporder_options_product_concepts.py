@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('rxocrpl', '0017_user_auth_user_link'),
+        ('rxocrpl', '0017_alter_rolegrant_reason'),
     ]
 
     operations = [
