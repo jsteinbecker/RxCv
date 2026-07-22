@@ -3,12 +3,68 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 class User(AbstractUser):
       """Pharmacy staff. is_rph distinguishes pharmacists (who can verify) from techs."""
       USERNAME_FIELD = "username"
       is_rph = models.BooleanField(default=False)
+      facility = models.ForeignKey(
+            "rxocrpl.Facility",
+            on_delete=models.SET_NULL,
+            null=True,
+            blank=True,
+            related_name="users",
+      )
+      user_type = models.CharField(max_length=100, null=True, blank=True)
+
+      def has_role (self, role_name: str, facility=None, organization=None) -> bool:
+            """
+            Check if user holds an active grant for the role at the given scope,
+            considering hierarchy inheritance.
+            """
+            from rxocrpl.models import RoleGrant
+
+            now = timezone.now()
+            base_qs = RoleGrant.objects.filter(
+                  user=self, role__name=role_name, revoked_at__isnull=True
+            ).exclude(expires_at__lt=now)
+
+            if organization:
+                  if base_qs.filter(organization=organization).exists():
+                        return True
+
+            if facility:
+                  if base_qs.filter(facility=facility).exists():
+                        return True
+
+                  curr = facility.parent
+                  while curr:
+                        if base_qs.filter(facility=curr).exists():
+                              return True
+                        curr = curr.parent
+
+                  if facility.organization:
+                        if base_qs.filter(organization=facility.organization).exists():
+                              return True
+
+            return False
+
+      @property
+      def is_admin (self) -> bool:
+            """Returns True if the user has any active admin grant."""
+            from rxocrpl.models import RoleGrant
+
+            return (
+                  RoleGrant.objects.filter(
+                        user=self,
+                        role__name__in=["org_admin", "facility_admin"],
+                        revoked_at__isnull=True,
+                  )
+                  .exclude(expires_at__lt=timezone.now())
+                  .exists()
+            )
 
 
 class TimeStampedModel(models.Model):

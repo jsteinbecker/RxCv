@@ -570,8 +570,10 @@ class Facility(models.Model):
       @property
       def current_admins (self):
             """Returns users with an active 'facility_admin' role for this facility."""
+            from django.contrib.auth import get_user_model
+
             return (
-                  User.objects.filter(
+                  get_user_model().objects.filter(
                         role_grants__facility=self,
                         role_grants__role__name="facility_admin",
                         role_grants__revoked_at__isnull=True,
@@ -581,94 +583,13 @@ class Facility(models.Model):
             )
 
 
-class User(models.Model):
-      """System user (pharmacist, technician, etc.) associated with a facility."""
-
-      name = models.CharField(max_length=255)
-      facility = models.ForeignKey(
-            Facility, on_delete=models.CASCADE, related_name="users"
-      )
-      user_type = models.CharField(max_length=100, null=True, blank=True)
-      auth_user = models.OneToOneField(
-            settings.AUTH_USER_MODEL,
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name="facility_profile",
-            help_text="Linked Django auth account",
-      )
-
-      class Meta:
-            app_label = "rxocrpl"
-
-      def __str__ (self):
-            if self.auth_user_id:
-                  display = self.auth_user.get_full_name() or self.auth_user.username
-                  return f"{display} @ {self.facility}"
-            return f"{self.name} @ {self.facility}"
-
-      def has_role (self, role_name: str, facility=None, organization=None) -> bool:
-            """
-            Check if user holds an active grant for the role at the given scope,
-            considering hierarchy inheritance.
-            :type role_name: str
-            :type facility: Facility | None
-            :type organization: Organization | None
-            :rtype: bool
-            """
-            now = timezone.now()
-            # Base query for active, non-expired grants for this user and role
-            base_qs = RoleGrant.objects.filter(
-                  user=self, role__name=role_name, revoked_at__isnull=True
-            ).exclude(expires_at__lt=now)
-
-            if organization:
-                  if base_qs.filter(organization=organization).exists():
-                        return True
-
-            if facility:
-                  # 1. Check direct facility grant
-                  if base_qs.filter(facility=facility).exists():
-                        return True
-
-                  # 2. Check ancestor facilities (walking the CareLocation parent chain)
-                  curr = facility.parent
-                  while curr:
-                        if base_qs.filter(facility=curr).exists():
-                              return True
-                        curr = curr.parent
-
-                  # 3. Check organization level grants (org-level grants implicitly cover all facilities)
-                  if facility.organization:
-                        if base_qs.filter(organization=facility.organization).exists():
-                              return True
-
-            return False
-
-      @property
-      def is_admin (self) -> bool:
-            """
-            Replacement for a simple boolean flag.
-            Returns True if the user has any active admin grant.
-            """
-            return (
-                  RoleGrant.objects.filter(
-                        user=self,
-                        role__name__in=["org_admin", "facility_admin"],
-                        revoked_at__isnull=True,
-                  )
-                  .exclude(expires_at__lt=timezone.now())
-                  .exists()
-            )
-
-
 class RoleGrant(models.Model):
       """
       Append-only grant ledger for admin permissions.
       A new record per permission change, never edited or deleted, only closed out.
       """
 
-      user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="role_grants")
+      user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="role_grants")
       role = models.ForeignKey(Role, on_delete=models.CASCADE)
 
       # Scope: org_id OR facility_id, never both (enforce via check constraint / clean())
@@ -680,7 +601,7 @@ class RoleGrant(models.Model):
       )
 
       granted_by = models.ForeignKey(
-            User,
+            settings.AUTH_USER_MODEL,
             on_delete=models.SET_NULL,
             null=True,
             blank=True,
@@ -689,7 +610,7 @@ class RoleGrant(models.Model):
       granted_at = models.DateTimeField(auto_now_add=True)
 
       revoked_by = models.ForeignKey(
-            User,
+            settings.AUTH_USER_MODEL,
             on_delete=models.SET_NULL,
             null=True,
             blank=True,
@@ -761,7 +682,7 @@ class RoleGrant(models.Model):
                         notes=f"Initial grant. Reason: {self.reason}",
                   )
 
-      def revoke (self, revoked_by: User, reason: str = ""):
+      def revoke (self, revoked_by, reason: str = ""):
             """Closes out the grant record (append-only principle)."""
             self.revoked_by = revoked_by
             self.revoked_at = timezone.now()
@@ -804,7 +725,7 @@ class RoleGrantEvent(models.Model):
             max_length=50
       )  # e.g., 'denied_attempt', 'auto_expiry', 'annotation'
       timestamp = models.DateTimeField(auto_now_add=True)
-      actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+      actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
       notes = models.TextField(blank=True)
 
       class Meta:
@@ -819,7 +740,7 @@ class ApprovedProductReconstitutionScheme(models.Model):
 
       product_ndcs = models.JSONField(default=list)  # List of NDCs this scheme applies to
       facility = models.ForeignKey(Facility, on_delete=models.CASCADE)
-      user = models.ForeignKey(User, on_delete=models.CASCADE)
+      user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
       whole_product_strength_mag = models.DecimalField(max_digits=12, decimal_places=4)
       whole_product_strength_unit = models.CharField(max_length=20)
       approved_diluents = models.JSONField(default=list)
