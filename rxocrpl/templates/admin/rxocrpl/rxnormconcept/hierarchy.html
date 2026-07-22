@@ -1,0 +1,173 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+    .rxh-wrap { max-width: 100%; }
+    .rxh-head {
+        display: flex; flex-wrap: wrap; gap: 1rem;
+        justify-content: space-between; align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+    .rxh-title { margin: 0; font-size: 20px; font-weight: 600; }
+    .rxh-title .rxh-cui { color: #64748b; font-weight: 400; font-size: 14px; }
+    .rxh-sub { margin: .25rem 0 0; color: #64748b; font-size: 13px; }
+    .rxh-toolbar { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .rxh-toolbar a {
+        display: inline-block; padding: 6px 12px; border-radius: 6px;
+        font-size: 12px; text-decoration: none; border: 1px solid #cbd5e1;
+        color: #1e293b; background: #fff;
+    }
+    .rxh-toolbar a.primary { background: #1e293b; color: #fff; border-color: #1e293b; }
+    .rxh-toolbar a:hover { background: #f1f5f9; }
+    .rxh-toolbar a.primary:hover { background: #0f172a; }
+
+    .rxh-legend {
+        display: flex; flex-wrap: wrap; gap: .75rem 1.25rem;
+        padding: .6rem .9rem; margin-bottom: 1rem;
+        border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;
+        font-size: 12px;
+    }
+    .rxh-legend .item { display: inline-flex; align-items: center; gap: .4rem; color: #475569; }
+    .rxh-legend .dot { width: 11px; height: 11px; border-radius: 3px; }
+    .rxh-legend .count { margin-left: auto; color: #94a3b8; }
+
+    .rxh-canvas {
+        border: 1px solid #e2e8f0; border-radius: 10px; background:
+            radial-gradient(circle at 1px 1px, #eef2f7 1px, transparent 0) 0 0 / 22px 22px,
+            #ffffff;
+        overflow: auto; padding: 4px;
+    }
+
+    /* SVG element styling */
+    .rxh-conn { fill: none; stroke-width: 1.6; opacity: .55; }
+    .rxh-arc { fill: none; stroke: #cbd5e1; opacity: .5; }
+
+    .card-link { cursor: pointer; }
+    .card-box {
+        fill: #ffffff; stroke: #e2e8f0; stroke-width: 1.2;
+        transition: stroke .12s, filter .12s;
+    }
+    .card-link:hover .card-box { stroke: #1e293b; filter: drop-shadow(0 2px 4px rgba(15,23,42,.14)); }
+    .card-accent { stroke-width: 0; }
+    .card-label { font-size: 12.5px; font-weight: 600; fill: #0f172a; }
+    .card-sub { font-size: 10.5px; fill: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .card-badge { font-size: 9px; fill: #64748b; text-anchor: end; letter-spacing: .04em; }
+    .card-more .card-box { stroke-dasharray: 4 3; fill: #f8fafc; }
+    .card-more .card-label { fill: #64748b; font-weight: 500; font-style: italic; }
+
+    .hub-box { stroke: #0f172a; stroke-width: 2; }
+    .hub-name { font-size: 15px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+    .hub-meta { font-size: 11px; fill: #e2e8f0; text-anchor: middle; }
+
+    .branch-head {
+        font-size: 11px; font-weight: 600; fill: #334155;
+        letter-spacing: .03em; text-transform: uppercase;
+    }
+    .branch-head.right { text-anchor: start; }
+    .branch-head.left { text-anchor: end; }
+
+    .rxh-empty { padding: 2rem; text-align: center; color: #94a3b8; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:rxocrpl_rxnormconcept_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {{ concept.rxcui }} hierarchy
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="rxh-wrap">
+    <div class="rxh-head">
+        <div>
+            <h1 class="rxh-title">{{ concept.name|default:concept.rxcui }}
+                <span class="rxh-cui">RXCUI {{ concept.rxcui }} · {{ hub.tty_label }} ({{ concept.tty }})</span>
+            </h1>
+            <p class="rxh-sub">
+                {{ summary.concept_count }} related concept{{ summary.concept_count|pluralize }}
+                across {{ summary.inbound_count }} inbound and {{ summary.outbound_count }} outbound relation group{{ summary.outbound_count|pluralize }}
+                · {{ summary.product_count }} connected NDC product{{ summary.product_count|pluralize }}
+                {% if summary.concepts_truncated %}<span style="color:#94a3b8;">(showing {{ summary.shown_concepts }}; each group caps at 9 — use the more links or the interactive graph for the rest)</span>{% endif %}
+            </p>
+        </div>
+        <div class="rxh-toolbar">
+            <a class="primary" href="{{ change_url }}">Edit concept</a>
+            <a href="{{ cytoscape_url }}">Interactive graph &rarr;</a>
+        </div>
+    </div>
+
+    {% if legend %}
+    <div class="rxh-legend">
+        {% for l in legend %}
+        <span class="item"><span class="dot" style="background:{{ l.color }}"></span>{{ l.tty }} · {{ l.label }}</span>
+        {% endfor %}
+        <span class="item"><span class="dot" style="background:#0f766e"></span>NDC · FDA Product</span>
+    </div>
+    {% endif %}
+
+    <div class="rxh-canvas">
+        {% if not branches %}
+        <div class="rxh-empty">
+            This concept has no materialized relations yet.
+            <a href="{{ cytoscape_url }}">Open the interactive graph</a> to sync it from RxNorm.
+        </div>
+        {% else %}
+        <svg viewBox="0 0 {{ svg_w }} {{ svg_h }}" width="{{ svg_w }}" height="{{ svg_h }}"
+             xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+             role="img" aria-label="Hierarchy diagram for {{ concept.name }}">
+            <defs>
+                <marker id="rxh-arrow-end" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+                </marker>
+                <marker id="rxh-arrow-start" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+                </marker>
+            </defs>
+
+            {# decorative concentric arcs behind the hub (celestial-infographic nod) #}
+            <circle class="rxh-arc" cx="{{ hub.cx }}" cy="{{ hub.cy }}" r="70"/>
+            <circle class="rxh-arc" cx="{{ hub.cx }}" cy="{{ hub.cy }}" r="104"/>
+            <circle class="rxh-arc" cx="{{ hub.cx }}" cy="{{ hub.cy }}" r="140"/>
+
+            {# connectors first, so cards sit on top #}
+            {% for c in connectors %}
+            <path class="rxh-conn" d="{{ c.path }}" stroke="{{ c.color }}"
+                  {% if c.to_hub %}marker-start="url(#rxh-arrow-start)"{% else %}marker-end="url(#rxh-arrow-end)"{% endif %}/>
+            {% endfor %}
+
+            {# branch headings #}
+            {% for b in branches %}
+            <text class="branch-head {{ b.side }}" x="{{ b.hx }}" y="{{ b.hy }}">{{ b.heading }}</text>
+            {% endfor %}
+
+            {# concept / product cards #}
+            {% for b in branches %}{% for card in b.cards %}
+            <a xlink:href="{{ card.url }}" class="card-link">
+                <rect class="card-box {% if card.is_more %}card-more{% endif %}"
+                      x="{{ card.x }}" y="{{ card.y }}" width="{{ card.w }}" height="{{ card.h }}" rx="8"/>
+                <rect class="card-accent" x="{{ card.x }}" y="{{ card.y }}" width="5" height="{{ card.h }}"
+                      rx="2" fill="{{ card.color }}"/>
+                <text class="card-label" x="{{ card.text_x }}" y="{{ card.label_y }}">{{ card.label }}</text>
+                <text class="card-sub" x="{{ card.text_x }}" y="{{ card.sub_y }}">{{ card.sub }}</text>
+                {% if card.accent %}
+                <text class="card-badge" x="{{ card.badge_x }}" y="{{ card.badge_y }}">{{ card.accent }}</text>
+                {% endif %}
+            </a>
+            {% endfor %}{% endfor %}
+
+            {# hub (anchor) drawn last so it is always on top #}
+            <rect class="hub-box" x="{{ hub.x }}" y="{{ hub.y }}" width="{{ hub.w }}" height="{{ hub.h }}"
+                  rx="10" fill="{{ hub.color }}"/>
+            <text class="hub-name" x="{{ hub.cx }}" y="{{ hub.name_y }}">{{ hub.name }}</text>
+            <text class="hub-meta" x="{{ hub.cx }}" y="{{ hub.meta_y }}">{{ hub.tty }} · RXCUI {{ hub.rxcui }}</text>
+        </svg>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
