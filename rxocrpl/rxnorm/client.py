@@ -35,10 +35,8 @@ def _get(path: str, **params) -> dict | None:
       Raises :class:`~rxnorm.models.RxNavError` on any other non-200 status.
       """
       url = f"{_BASE_URL}/{path.lstrip('/')}"
-      print(url)
       if params:
             url = f"{url}?{urlencode(params)}"
-            print(url)
 
       response = _session.get(url, timeout=_TIMEOUT)
 
