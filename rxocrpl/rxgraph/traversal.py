@@ -105,6 +105,16 @@ def dose_form_group(concept: RxNormConcept) -> QuerySet[RxNormConcept]:
       return _related(concept, rela="inverse_isa", outgoing=False, target_tty="SCDG")
 
 
+def branded_drugs(concept: RxNormConcept) -> QuerySet[RxNormConcept]:
+      """SBD branded forms of this SCD (SCD has_tradename SBD)."""
+      return _related(concept, rela="has_tradename", outgoing=True, target_tty="SBD")
+
+
+def clinical_drug(concept: RxNormConcept) -> QuerySet[RxNormConcept]:
+      """The SCD this SBD is a tradename of (inverse of SCD has_tradename)."""
+      return _related(concept, rela="has_tradename", outgoing=False, target_tty="SCD")
+
+
 class RxConceptTraversalMixin:
       """Mix into your RxNormConcept model for ``concept.ingredients()`` access."""
 
@@ -125,3 +135,9 @@ class RxConceptTraversalMixin:
 
       def dose_form_group(self: Any) -> QuerySet[RxNormConcept]:
             return dose_form_group(self)
+
+      def branded_drugs(self: Any) -> QuerySet[RxNormConcept]:
+            return branded_drugs(self)
+
+      def clinical_drug(self: Any) -> QuerySet[RxNormConcept]:
+            return clinical_drug(self)

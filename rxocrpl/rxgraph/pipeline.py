@@ -52,13 +52,15 @@ RELATION_NUMERATOR_UNIT_FIELD = "numerator_unit"
 RELATION_DENOMINATOR_VALUE_FIELD = "denominator_value"
 RELATION_DENOMINATOR_UNIT_FIELD = "denominator_unit"
 
-# The TTYs this pipeline materializes, exactly as requested.
-DEFAULT_TTYS: frozenset[str] = frozenset({"BN", "IN", "PIN", "SCD", "SCDG", "SCDC"})
+# The TTYs this pipeline materializes.  SBD (Semantic Branded Drug) is the
+# branded counterpart of SCD and is linked to it by has_tradename/tradename_of;
+# without it in the family, that SCD↔SBD edge can never be built.
+DEFAULT_TTYS: frozenset[str] = frozenset({"BN", "IN", "PIN", "SCD", "SCDG", "SCDC", "SBD"})
 
 # Outbound edge rules: source TTY -> [(rela, {allowed target TTYs}), ...].
-# Each clinically meaningful edge among the six TTYs is captured exactly once,
-# in a canonical forward direction; inverses (constitutes, ingredient_of, ...)
-# are derivable and intentionally not duplicated.
+# Each clinically meaningful edge among these TTYs is captured exactly once,
+# in a canonical forward direction; inverses (constitutes, ingredient_of,
+# tradename_of, ...) are derivable and intentionally not duplicated.
 #
 #   IN  --has_tradename-->        BN     (Tylenol tradename_of acetaminophen)
 #   IN  --has_form-->             PIN    (precise ingredient salt form)
@@ -66,6 +68,8 @@ DEFAULT_TTYS: frozenset[str] = frozenset({"BN", "IN", "PIN", "SCD", "SCDG", "SCD
 #   SCDC--has_precise_ingredient->PIN
 #   SCD --consists_of-->          SCDC
 #   SCD --has_ingredient-->       IN
+#   SCD --has_tradename-->        SBD    (branded form; SBD tradename_of SCD)
+#   SBD --has_ingredient-->       IN
 #   SCDG--inverse_isa-->          SCD    (SCDG sits above its dose-form SCDs)
 #   SCDG--has_ingredient-->       IN
 EDGE_RULES: dict[str, list[tuple[str, frozenset[str]]]] = {
@@ -76,7 +80,9 @@ EDGE_RULES: dict[str, list[tuple[str, frozenset[str]]]] = {
       "SCDC": [("has_ingredient", frozenset({"IN"})),
                ("has_precise_ingredient", frozenset({"PIN"}))],
       "SCD": [("consists_of", frozenset({"SCDC"})),
-              ("has_ingredient", frozenset({"IN"}))],
+              ("has_ingredient", frozenset({"IN"})),
+              ("has_tradename", frozenset({"SBD"}))],
+      "SBD": [("has_ingredient", frozenset({"IN"}))],  # SCD↔SBD via SCD.has_tradename
       "SCDG": [("inverse_isa", frozenset({"SCD"})),
                ("has_ingredient", frozenset({"IN"}))],
 }
@@ -100,9 +106,9 @@ _ANCHORED_AT_KEY = "anchored_at"
 
 # TTYs whose nodes are worth expanding when chaining.  Bare ingredients (IN)
 # and brand names (BN) fan out to hundreds of unrelated products, so chaining
-# through them is intentionally excluded; the drug-level TTYs give a bounded,
-# clinically-coherent neighborhood.
-CHAIN_TTYS: frozenset[str] = frozenset({"SCD", "SCDG", "SCDC", "PIN"})
+# through them is intentionally excluded; the drug-level TTYs (clinical SCD and
+# branded SBD included) give a bounded, clinically-coherent neighborhood.
+CHAIN_TTYS: frozenset[str] = frozenset({"SCD", "SBD", "SCDG", "SCDC", "PIN"})
 
 _UNSET = object()
 
