@@ -18,10 +18,12 @@ legibility.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from math import ceil
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
-from django.db.models import Q
 from django.urls import reverse
 
 if TYPE_CHECKING:
@@ -168,11 +170,81 @@ def _product_url(ndc: str) -> str:
       return reverse("admin:rxocrpl_product_change", args=[ndc])
 
 
-def _collect_branches(concept: "RxNormConcept") -> tuple[list[Branch], set[str]]:
+# --- per-branch pagination (keeps overflow on this page instead of the ------
+#     interactive graph; each branch pages independently via ?pg_<key>=N) ---
+def _param_for(key: str) -> str:
+      """URL-safe query-param name uniquely identifying a branch."""
+      return "pg_" + re.sub(r"[^0-9a-zA-Z]+", "_", key)
+
+
+def _clamp_page(query: dict[str, str] | None, key: str, page_count: int) -> int:
+      raw = (query or {}).get(_param_for(key), "0")
+      try:
+            page = int(raw)
+      except (TypeError, ValueError):
+            page = 0
+      return max(0, min(page, page_count - 1))
+
+
+def _paged_url(
+          base: str, query: dict[str, str] | None, key: str, page: int
+) -> str:
+      """URL for the hierarchy page with just ``key``'s page changed.
+
+      Every *other* branch's page is preserved, so paging one group does not
+      reset the others.
+      """
+      param = _param_for(key)
+      params = {
+            k: v
+            for k, v in (query or {}).items()
+            if k.startswith("pg_") and k != param
+      }
+      if page > 0:
+            params[param] = str(page)
+      qs = urlencode(sorted(params.items()))
+      return f"{base}?{qs}" if qs else base
+
+
+def _pager(
+          *,
+          key: str,
+          page: int,
+          page_count: int,
+          remaining: int,
+          noun: str,
+          base: str,
+          query: dict[str, str] | None,
+) -> tuple["Card | None", "Card | None"]:
+      """Build the previous / next navigation cards for a paginated branch."""
+      prev_card = next_card = None
+      if page > 0:
+            prev_card = Card(
+                  label=f"← previous {noun}",
+                  sub=f"page {page} of {page_count}",
+                  color=DEFAULT_COLOR,
+                  url=_paged_url(base, query, key, page - 1),
+                  is_more=True,
+            )
+      if page < page_count - 1:
+            next_card = Card(
+                  label=f"+{remaining} more {noun}",
+                  sub=f"page {page + 2} of {page_count}",
+                  color=DEFAULT_COLOR,
+                  url=_paged_url(base, query, key, page + 1),
+                  is_more=True,
+            )
+      return prev_card, next_card
+
+
+def _collect_branches(
+          concept: "RxNormConcept", query: dict[str, str] | None = None
+) -> tuple[list[Branch], set[str]]:
       """Group the anchor's direct relations into per-``rela`` branches.
 
       Returns the branches plus the set of every rxcui appearing in the ego
-      graph (used to find connected products).
+      graph (used to find connected products). ``query`` carries the per-branch
+      page state (``pg_<key>`` params) so overflow can be paged in place.
       """
       from rxocrpl.models import RxNormConceptRelation
 
@@ -184,6 +256,7 @@ def _collect_branches(concept: "RxNormConcept") -> tuple[list[Branch], set[str]]
       )
 
       ego_rxcuis: set[str] = {concept.rxcui}
+      base = _concept_url(concept.rxcui)
 
       def build(relations, *, direction: str) -> list[Branch]:
             # rela -> {rxcui -> concept}
@@ -202,13 +275,35 @@ def _collect_branches(concept: "RxNormConcept") -> tuple[list[Branch], set[str]]
                         key=lambda c: (TTY_RANK.get(c.tty or "", 2), (c.name or "").lower()),
                   )
                   rank = min((TTY_RANK.get(c.tty or "", 2) for c in concepts), default=2)
+                  noun = rela.replace("_", " ")
+                  key = f"{direction}:{rela}"
+                  page_count = max(1, ceil(len(concepts) / MAX_PER_BRANCH))
+                  page = _clamp_page(query, key, page_count)
+                  start = page * MAX_PER_BRANCH
+                  window = concepts[start : start + MAX_PER_BRANCH]
+
+                  base_heading = (
+                        f"{arrow} {noun}" if direction == "out" else f"{noun} {arrow}"
+                  )
                   heading = (
-                        f"{arrow} {rela.replace('_', ' ')}"
-                        if direction == "out"
-                        else f"{rela.replace('_', ' ')} {arrow}"
+                        f"{base_heading} · {page + 1}/{page_count}"
+                        if page_count > 1
+                        else base_heading
+                  )
+
+                  prev_card, next_card = _pager(
+                        key=key,
+                        page=page,
+                        page_count=page_count,
+                        remaining=len(concepts) - (start + len(window)),
+                        noun=noun,
+                        base=base,
+                        query=query,
                   )
                   cards: list[Card] = []
-                  for c in concepts[:MAX_PER_BRANCH]:
+                  if prev_card:
+                        cards.append(prev_card)
+                  for c in window:
                         cards.append(
                               Card(
                                     label=_short(c.name),
@@ -218,17 +313,8 @@ def _collect_branches(concept: "RxNormConcept") -> tuple[list[Branch], set[str]]
                                     accent=c.tty or "",
                               )
                         )
-                  overflow = len(concepts) - MAX_PER_BRANCH
-                  if overflow > 0:
-                        cards.append(
-                              Card(
-                                    label=f"+{overflow} more {rela.replace('_', ' ')}",
-                                    sub="view full graph",
-                                    color=DEFAULT_COLOR,
-                                    url=reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
-                                    is_more=True,
-                              )
-                        )
+                  if next_card:
+                        cards.append(next_card)
                   branches.append(Branch(heading=heading, rank=rank, side=side, cards=cards))
             return branches
 
@@ -241,13 +327,16 @@ def _collect_branches(concept: "RxNormConcept") -> tuple[list[Branch], set[str]]
 
 
 def _collect_product_branch(
-          concept: "RxNormConcept", ego_rxcuis: set[str]
+          concept: "RxNormConcept",
+          ego_rxcuis: set[str],
+          query: dict[str, str] | None = None,
 ) -> tuple[Branch | None, dict[str, str], int]:
       """Build the "NDC products" branch from confirmed RxCUI->NDC mappings.
 
       Returns the branch, a mapping of product-NDC -> the rxcui it is tied to
       (so the caller can route each product's connector to the right concept
-      card), and the true total number of distinct connected products.
+      card), and the true total number of distinct connected products. Overflow
+      is paged in place via the ``pg_products`` query param.
       """
       from rxocrpl.models import Product, ProductRxNormMapping
 
@@ -256,7 +345,6 @@ def _collect_product_branch(
                   "rxcui", "product_ndc"
             )
       )
-      total_products = len({m.product_ndc for m in mappings})
       if not mappings:
             return None, {}, 0
 
@@ -264,8 +352,9 @@ def _collect_product_branch(
             [m.product_ndc for m in mappings], field_name="product_ndc"
       )
 
-      cards: list[Card] = []
+      # De-dupe to one entry per NDC, preserving the (rxcui, ndc) ordering.
       ndc_to_rxcui: dict[str, str] = {}
+      items: list[tuple[str, str, str]] = []  # (ndc, label, tie)
       seen: set[str] = set()
       for m in mappings:
             if m.product_ndc in seen:
@@ -279,31 +368,47 @@ def _collect_product_branch(
                   else (m.name or m.product_ndc)
             )
             tie = "anchor" if m.rxcui == concept.rxcui else m.rxcui
+            items.append((m.product_ndc, label, tie))
+
+      total_products = len(items)
+      key = "products"
+      page_count = max(1, ceil(total_products / MAX_PER_BRANCH))
+      page = _clamp_page(query, key, page_count)
+      start = page * MAX_PER_BRANCH
+      window = items[start : start + MAX_PER_BRANCH]
+
+      prev_card, next_card = _pager(
+            key=key,
+            page=page,
+            page_count=page_count,
+            remaining=total_products - (start + len(window)),
+            noun="products",
+            base=_concept_url(concept.rxcui),
+            query=query,
+      )
+      cards: list[Card] = []
+      if prev_card:
+            cards.append(prev_card)
+      for ndc, label, tie in window:
             cards.append(
                   Card(
                         label=_short(label, 40),
-                        sub=f"{m.product_ndc}  ·  {tie}",
+                        sub=f"{ndc}  ·  {tie}",
                         color=PRODUCT_COLOR,
-                        url=_product_url(m.product_ndc),
+                        url=_product_url(ndc),
                         accent="NDC",
                   )
             )
-            if len(cards) >= MAX_PER_BRANCH:
-                  break
+      if next_card:
+            cards.append(next_card)
 
-      overflow = len(seen) - len(cards)
-      if overflow > 0:
-            cards.append(
-                  Card(
-                        label=f"+{overflow} more products",
-                        sub="",
-                        color=DEFAULT_COLOR,
-                        url=reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
-                        is_more=True,
-                  )
-            )
-
-      branch = Branch(heading="→ NDC products", rank=5, side="right", cards=cards)
+      base_heading = "→ NDC products"
+      heading = (
+            f"{base_heading} · {page + 1}/{page_count}"
+            if page_count > 1
+            else base_heading
+      )
+      branch = Branch(heading=heading, rank=5, side="right", cards=cards)
       return branch, ndc_to_rxcui, total_products
 
 
@@ -315,15 +420,20 @@ def _bezier(sx: float, sy: float, ex: float, ey: float) -> str:
       return f"M {sx:.1f} {sy:.1f} C {c1x:.1f} {sy:.1f} {c2x:.1f} {ey:.1f} {ex:.1f} {ey:.1f}"
 
 
-def build_hierarchy(concept: "RxNormConcept") -> dict:
+def build_hierarchy(
+          concept: "RxNormConcept", query: dict[str, str] | None = None
+) -> dict:
       """Compute the full positioned diagram for ``concept``.
 
       Returns a context dict ready to hand to the template: SVG dimensions, the
-      hub, positioned cards, connectors, a legend and summary counts.
+      hub, positioned cards, connectors, a legend and summary counts. ``query``
+      (typically ``request.GET``) supplies each branch's ``pg_<key>`` page so
+      overflow nodes are paged in place rather than punting to the interactive
+      graph.
       """
-      branches, ego_rxcuis = _collect_branches(concept)
+      branches, ego_rxcuis = _collect_branches(concept, query)
       product_branch, ndc_to_rxcui, total_products = _collect_product_branch(
-            concept, ego_rxcuis
+            concept, ego_rxcuis, query
       )
       if product_branch is not None:
             branches.append(product_branch)

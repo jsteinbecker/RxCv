@@ -91,7 +91,7 @@
                 {{ summary.concept_count }} related concept{{ summary.concept_count|pluralize }}
                 across {{ summary.inbound_count }} inbound and {{ summary.outbound_count }} outbound relation group{{ summary.outbound_count|pluralize }}
                 · {{ summary.product_count }} connected NDC product{{ summary.product_count|pluralize }}
-                {% if summary.concepts_truncated %}<span style="color:#94a3b8;">(showing {{ summary.shown_concepts }}; each group caps at 9 — use the more links or the interactive graph for the rest)</span>{% endif %}
+                {% if summary.concepts_truncated %}<span style="color:#94a3b8;">(showing {{ summary.shown_concepts }} on the current pages; each group shows 9 at a time — use its page links for the rest)</span>{% endif %}
             </p>
         </div>
         <div class="rxh-toolbar">

@@ -439,7 +439,7 @@ class RxNormConceptAdmin(admin.ModelAdmin):
             concept = get_object_or_404(RxNormConcept, rxcui=rxcui)
             context = {
                   **self.admin_site.each_context(request),
-                  **build_hierarchy(concept),
+                  **build_hierarchy(concept, request.GET.dict()),
                   "title": f"Hierarchy · {concept.name or concept.rxcui}",
                   "opts": self.model._meta,
                   "cytoscape_url": reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
