@@ -305,6 +305,15 @@ def get_rxnorm_enrichment(ndc: str) -> RxNormEnrichment:
 
       labeler = get_labeler(ndc)
 
+      # Skip RxNorm network calls that are unlikely to enrich.  A labeler
+      # resolved from the local curation file with ``in_rxnorm=False`` has no
+      # products in RxNorm, so NDC→RxCUI resolution will almost certainly miss.
+      # Return early with just the labeler (which resolved offline) rather than
+      # spending three ``relatedndc`` requests to confirm the miss.  openFDA-
+      # sourced labelers carry ``in_rxnorm=None`` and are *not* skipped.
+      if labeler is not None and labeler.in_rxnorm is False:
+            return RxNormEnrichment(labeler=labeler)
+
       rxcui_map = get_all_rxcui(ndc)
       concept_items = rxcui_map.get(RelatedLevel.CONCEPT) or []
       concept_rxcui = _select_concept_rxcui(concept_items)
