@@ -1,4 +1,4 @@
-"""rxgraph: build the RxNorm concept graph (BN/IN/PIN/SCD/SCDG/SCDC) from RxNav.
+"""rxgraph: build the RxNorm concept graph (BN/IN/PIN/SCD/SBD/SCDG/SCDC) from RxNav.
 
 Run a live pull and printout against the real RxNav API::
 
@@ -73,7 +73,8 @@ class _FakeRxNav:
                         {"rxcui": "314051", "tty": "SCDC", "name": "Acetaminophen 325 MG", "suppress": "N"}]},
                   {"tty": "SCDG", "conceptProperties": [
                         {"rxcui": "1156291", "tty": "SCDG", "name": "Acetaminophen Pill", "suppress": "N"}]},
-                  # SBD is outside the requested TTY set and must be dropped.
+                  # SBD is the branded counterpart of the SCD and is now kept,
+                  # linked back via SCD.has_tradename.
                   {"tty": "SBD", "conceptProperties": [
                         {"rxcui": "209387", "tty": "SBD",
                          "name": "Acetaminophen 325 MG Oral Tablet [Tylenol]", "suppress": "N"}]},
@@ -86,6 +87,10 @@ class _FakeRxNav:
             ("314051", "has_precise_ingredient"): [],
             ("313782", "consists_of"): [{"rxcui": "314051", "tty": "SCDC", "name": "Acetaminophen 325 MG"}],
             ("313782", "has_ingredient"): [{"rxcui": "161", "tty": "IN", "name": "Acetaminophen"}],
+            ("313782", "has_tradename"): [
+                  {"rxcui": "209387", "tty": "SBD",
+                   "name": "Acetaminophen 325 MG Oral Tablet [Tylenol]"}],
+            ("209387", "has_ingredient"): [{"rxcui": "161", "tty": "IN", "name": "Acetaminophen"}],
             ("1156291", "inverse_isa"): [
                   {"rxcui": "313782", "tty": "SCD", "name": "Acetaminophen 325 MG Oral Tablet"},
                   # SCDF also comes back here and must be filtered out by target TTY.
@@ -137,9 +142,10 @@ def _self_test_offline() -> None:
       print(f"\n  Acetaminophen 325 MG Oral Tablet ({DEMO_RXCUI})")
       _print_graph(graph)
 
-      # The SBD and the stray SCDF must not survive the TTY filter.
-      assert len(graph.nodes) == 5, f"expected 5 nodes, got {len(graph.nodes)}"
-      assert "209387" not in graph.nodes, "SBD should have been filtered out"
+      # SBD is now kept (branded counterpart of the SCD); the stray SCDF must
+      # still not survive the TTY filter.
+      assert len(graph.nodes) == 6, f"expected 6 nodes, got {len(graph.nodes)}"
+      assert "209387" in graph.nodes, "SBD should have been materialized"
       assert "999999" not in graph.nodes, "SCDF should have been filtered out"
       built = {(e.source, e.rela, e.target) for e in graph.edges}
       expected = {
@@ -147,6 +153,8 @@ def _self_test_offline() -> None:
             ("314051", "has_ingredient", "161"),
             ("313782", "consists_of", "314051"),
             ("313782", "has_ingredient", "161"),
+            ("313782", "has_tradename", "209387"),
+            ("209387", "has_ingredient", "161"),
             ("1156291", "inverse_isa", "313782"),
             ("1156291", "has_ingredient", "161"),
       }
