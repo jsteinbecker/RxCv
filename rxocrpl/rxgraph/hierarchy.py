@@ -19,6 +19,7 @@ legibility.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from textwrap import wrap
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -66,13 +67,14 @@ TTY_RANK = {
 
 # --- geometry (all values in SVG user units / px) ---
 CARD_W = 224
-CARD_H = 42
+CARD_H = 58
 CARD_VGAP = 12          # vertical gap between cards within a branch
 GROUP_HEADER_H = 26     # height reserved for a branch's rela heading
 GROUP_GAP = 30          # vertical gap between branches on the same side
 HUB_W = 260
 HUB_H = 74
 BRANCH_GAP_X = 96       # horizontal gap between the hub edge and its cards
+BRANCH_COLUMN_GAP_X = 52
 MARGIN_X = 44
 MARGIN_TOP = 96         # room for the title / legend band
 MARGIN_BOTTOM = 44
@@ -90,6 +92,19 @@ def _short(name: str | None, limit: int = 46) -> str:
       return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
 
 
+def _wrap_text(value: str | None, width: int, max_lines: int) -> list[str]:
+      if not value:
+            return [""]
+      lines = wrap(value.strip(), width=width, break_long_words=False, break_on_hyphens=False)
+      if not lines:
+            return [""]
+      if len(lines) <= max_lines:
+            return lines
+      kept = lines[:max_lines]
+      kept[-1] = _short(kept[-1], width)
+      return kept
+
+
 @dataclass
 class Card:
       """A positioned, clickable box in the diagram."""
@@ -104,6 +119,7 @@ class Card:
       h: float = CARD_H
       accent: str = ""          # optional right-aligned badge (e.g. TTY)
       is_more: bool = False
+      column: int = 1           # right-side branches can occupy a second column
 
       @property
       def cx(self) -> float:
@@ -120,11 +136,11 @@ class Card:
 
       @property
       def label_y(self) -> float:
-            return self.y + 18
+            return self.y + 17
 
       @property
       def sub_y(self) -> float:
-            return self.y + 33
+            return self.y + 43
 
       @property
       def badge_x(self) -> float:
@@ -132,7 +148,15 @@ class Card:
 
       @property
       def badge_y(self) -> float:
-            return self.y + self.h / 2 + 4
+            return self.y + 15
+
+      @property
+      def label_lines(self) -> list[str]:
+            return _wrap_text(self.label, width=30, max_lines=2)
+
+      @property
+      def sub_lines(self) -> list[str]:
+            return _wrap_text(self.sub, width=34, max_lines=1)
 
 
 @dataclass
@@ -143,6 +167,7 @@ class Branch:
       rank: int
       side: str                 # "left" or "right"
       cards: list[Card] = field(default_factory=list)
+      column: int = 1
       hx: float = 0.0           # heading anchor x
       hy: float = 0.0           # heading anchor y
 
@@ -211,7 +236,7 @@ def _collect_branches(concept: "RxNormConcept") -> tuple[list[Branch], set[str]]
                   for c in concepts[:MAX_PER_BRANCH]:
                         cards.append(
                               Card(
-                                    label=_short(c.name),
+                                    label=c.name or c.rxcui,
                                     sub=f"{c.rxcui}",
                                     color=_color_for(c.tty),
                                     url=_concept_url(c.rxcui),
@@ -281,7 +306,7 @@ def _collect_product_branch(
             tie = "anchor" if m.rxcui == concept.rxcui else m.rxcui
             cards.append(
                   Card(
-                        label=_short(label, 40),
+                        label=label,
                         sub=f"{m.product_ndc}  ·  {tie}",
                         color=PRODUCT_COLOR,
                         url=_product_url(m.product_ndc),
@@ -326,6 +351,10 @@ def build_hierarchy(concept: "RxNormConcept") -> dict:
             concept, ego_rxcuis
       )
       if product_branch is not None:
+            if any(b.side == "right" for b in branches):
+                  product_branch.column = 2
+                  for card in product_branch.cards:
+                        card.column = 2
             branches.append(product_branch)
 
       left = [b for b in branches if b.side == "left"]
@@ -342,7 +371,15 @@ def build_hierarchy(concept: "RxNormConcept") -> dict:
 
       # Horizontal extents: hub in the middle, cards BRANCH_GAP_X beyond each edge.
       left_extent = HUB_W / 2 + BRANCH_GAP_X + CARD_W if left else HUB_W / 2
-      right_extent = HUB_W / 2 + BRANCH_GAP_X + CARD_W if right else HUB_W / 2
+      right_columns = max((b.column for b in right), default=0)
+      right_extent = (
+            HUB_W / 2
+            + BRANCH_GAP_X
+            + right_columns * CARD_W
+            + max(0, right_columns - 1) * BRANCH_COLUMN_GAP_X
+            if right
+            else HUB_W / 2
+      )
       center_x = MARGIN_X + left_extent
       total_w = center_x + right_extent + MARGIN_X
 
@@ -355,11 +392,12 @@ def build_hierarchy(concept: "RxNormConcept") -> dict:
             "cy": center_y,
             "color": _color_for(concept.tty),
             "name": _short(concept.name, 52),
+            "name_lines": _wrap_text(concept.name, width=34, max_lines=2),
             "rxcui": concept.rxcui,
             "tty": concept.tty or "",
             "tty_label": TTY_LABELS.get(concept.tty or "", "Concept"),
-            "name_y": center_y - 6,
-            "meta_y": center_y + 15,
+            "name_y": center_y - 13,
+            "meta_y": center_y + 22,
       }
 
       connectors: list[Connector] = []
@@ -375,7 +413,12 @@ def build_hierarchy(concept: "RxNormConcept") -> dict:
                         branch.hx = card_x + CARD_W  # right-align heading
                         hub_edge_x = center_x - HUB_W / 2
                   else:
-                        card_x = center_x + HUB_W / 2 + BRANCH_GAP_X
+                        card_x = (
+                              center_x
+                              + HUB_W / 2
+                              + BRANCH_GAP_X
+                              + (branch.column - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
+                        )
                         branch.hx = card_x
                         hub_edge_x = center_x + HUB_W / 2
 

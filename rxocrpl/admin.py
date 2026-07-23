@@ -414,9 +414,28 @@ class RxNormConceptAdmin(admin.ModelAdmin):
       list_filter = ["tty"]
       sortable_by = ["rxid", "name", "tty"]
       readonly_fields = ["hierarchy_link"]
+      change_form_template = "admin/rxocrpl/rxnormconcept/change_form.html"
 
       def view_on_site (self, obj):
             return reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[obj.rxcui])
+
+      def _hierarchy_context (self, concept):
+            from .rxgraph.hierarchy import build_hierarchy
+
+            return {
+                  **build_hierarchy(concept),
+                  "cytoscape_url": reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
+                  "change_url": reverse(
+                        "admin:rxocrpl_rxnormconcept_change", args=[concept.rxcui]
+                  ),
+            }
+
+      def change_view (self, request, object_id, form_url="", extra_context=None):
+            concept = self.get_object(request, object_id)
+            extra_context = extra_context or {}
+            if concept:
+                  extra_context["hierarchy"] = self._hierarchy_context(concept)
+            return super().change_view(request, object_id, form_url, extra_context)
 
       def get_urls (self):
             from django.urls import path
@@ -434,18 +453,12 @@ class RxNormConceptAdmin(admin.ModelAdmin):
       def hierarchy_view (self, request, rxcui):
             from django.shortcuts import get_object_or_404, render
 
-            from .rxgraph.hierarchy import build_hierarchy
-
             concept = get_object_or_404(RxNormConcept, rxcui=rxcui)
             context = {
                   **self.admin_site.each_context(request),
-                  **build_hierarchy(concept),
+                  **self._hierarchy_context(concept),
                   "title": f"Hierarchy · {concept.name or concept.rxcui}",
                   "opts": self.model._meta,
-                  "cytoscape_url": reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
-                  "change_url": reverse(
-                        "admin:rxocrpl_rxnormconcept_change", args=[concept.rxcui]
-                  ),
             }
             return render(request, "admin/rxocrpl/rxnormconcept/hierarchy.html", context)
 
