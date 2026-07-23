@@ -21,6 +21,9 @@ Design notes
 from __future__ import annotations
 
 import dataclasses
+import logging
+from collections import deque
+from datetime import datetime, timedelta
 from typing import Any, Callable, Iterable, Optional
 
 from django.apps import apps as django_apps
@@ -28,6 +31,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from .client import RxNavClient
+
+log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Configuration -- adjust these to match your models if needed.
@@ -79,6 +84,27 @@ EDGE_RULES: dict[str, list[tuple[str, frozenset[str]]]] = {
 # RxNav SUPPRESS values that mean "do not treat as an active concept".
 # (Y = suppressible, O = obsolete, E = quantified/expanded form.) N / "" = active.
 _SUPPRESSED = {"Y", "O", "E"}
+
+# How long a fully-anchored concept stays "fresh" before ``materialize_concept``
+# will re-probe RxNav for it.  RxNorm ships monthly, so a 30-day window means at
+# most one refresh per release while still skipping the redundant re-fetch that
+# used to happen on every run.  Pass ``force=True`` (or ``refresh_after=None``)
+# to always re-fetch.
+DEFAULT_REFRESH_AFTER = timedelta(days=30)
+
+# ``attributes`` key recording when a concept was last *fully expanded as an
+# anchor* (its whole family + edges fetched).  Distinct from ``synced_at``,
+# which also advances when a concept is merely created as a neighbor of some
+# other anchor and therefore does not imply its own neighborhood was fetched.
+_ANCHORED_AT_KEY = "anchored_at"
+
+# TTYs whose nodes are worth expanding when chaining.  Bare ingredients (IN)
+# and brand names (BN) fan out to hundreds of unrelated products, so chaining
+# through them is intentionally excluded; the drug-level TTYs give a bounded,
+# clinically-coherent neighborhood.
+CHAIN_TTYS: frozenset[str] = frozenset({"SCD", "SCDG", "SCDC", "PIN"})
+
+_UNSET = object()
 
 
 # --------------------------------------------------------------------------- #
@@ -245,15 +271,45 @@ def materialize_concept(
           build_edges: bool = True,
           max_nodes: int = 2000,
           strength_resolver: Optional[StrengthResolver] = None,
+          refresh_after: Optional[timedelta] = _UNSET,  # type: ignore[assignment]
+          force: bool = False,
 ) -> MaterializeResult:
       """Fetch and persist ``rxcui``'s concept neighborhood. Idempotent.
 
       Returns a :class:`MaterializeResult`. Existing rows are updated in place
       (``update_or_create`` on ``rxcui``); existing edges are left untouched.
+
+      Skipping already-done work
+      --------------------------
+      When ``rxcui`` was already fully expanded as an anchor within
+      ``refresh_after`` (default :data:`DEFAULT_REFRESH_AFTER`), the RxNav fetch
+      is skipped entirely and the neighborhood is served from the DB.  This is
+      the persistent, cross-process counterpart to the in-process ``lru_cache``
+      on the low-level client.  Pass ``force=True`` to always re-fetch, or
+      ``refresh_after=None`` to disable the freshness window for this call.
       """
+      if refresh_after is _UNSET:
+            refresh_after = DEFAULT_REFRESH_AFTER
 
       client = client or RxNavClient()
       concept_model, relation_model = _resolve_models()
+
+      # ---- skip phase (DB only) ----
+      # Serve a still-fresh, already-anchored concept from the DB without a
+      # single RxNav request.
+      if not force and refresh_after is not None:
+            existing = concept_model.objects.filter(rxcui=rxcui).first()
+            if existing is not None and _anchor_is_fresh(existing, refresh_after):
+                  concepts, relations = _load_neighborhood(
+                        concept_model, relation_model, existing
+                  )
+                  return MaterializeResult(
+                        anchor=existing,
+                        concepts=concepts,
+                        relations=relations,
+                        created_concepts=0,
+                        created_relations=0,
+                  )
 
       # ---- network phase (no DB) ----
       graph = fetch_family(
@@ -271,7 +327,7 @@ def materialize_concept(
             relations, created_r = _upsert_edges(
                   relation_model, concepts, graph.nodes, graph.edges, strength_resolver
             )
-            print(concepts, created_c, relations, created_r)
+            _mark_anchored(concepts.get(rxcui) or concepts.get(graph.anchor), now)
 
       anchor_obj = concepts.get(rxcui) or concepts.get(graph.anchor)
       return MaterializeResult(
@@ -281,6 +337,53 @@ def materialize_concept(
             created_concepts=created_c,
             created_relations=created_r,
       )
+
+
+def _anchor_is_fresh(concept, refresh_after: timedelta) -> bool:
+      """True if ``concept`` was fully anchored within ``refresh_after``.
+
+      Reads the ``anchored_at`` marker stamped by :func:`_mark_anchored`.  A
+      concept that only exists as a neighbor of some other anchor has no marker
+      and is therefore never considered fresh, so chaining into it still fetches
+      its own family.
+      """
+      attrs = getattr(concept, "attributes", None) or {}
+      stamp = attrs.get(_ANCHORED_AT_KEY)
+      if not stamp:
+            return False
+      try:
+            anchored_at = datetime.fromisoformat(stamp)
+      except (TypeError, ValueError):
+            return False
+      return (timezone.now() - anchored_at) < refresh_after
+
+
+def _mark_anchored(anchor, now: datetime) -> None:
+      """Stamp ``anchored_at`` on the anchor so later runs can skip it."""
+      if anchor is None:
+            return
+      attrs = dict(getattr(anchor, "attributes", {}) or {})
+      attrs[_ANCHORED_AT_KEY] = now.isoformat()
+      anchor.attributes = attrs
+      anchor.save(update_fields=["attributes"])
+
+
+def _load_neighborhood(concept_model, relation_model, anchor):
+      """Load ``anchor``'s 1-hop neighborhood from the DB (no network).
+
+      Returns ``(concepts, relations)`` shaped like the write phase's output so
+      the freshness-skip path and the chaining driver see a uniform result.
+      """
+      relations = list(
+            relation_model.objects.filter(
+                  **{f"{RELATION_SOURCE_FIELD}__rxcui": anchor.rxcui}
+            ).select_related(RELATION_SOURCE_FIELD, RELATION_TARGET_FIELD)
+      )
+      concepts: dict[str, object] = {anchor.rxcui: anchor}
+      for rel in relations:
+            target = getattr(rel, RELATION_TARGET_FIELD)
+            concepts[target.rxcui] = target
+      return concepts, relations
 
 
 def _upsert_nodes(concept_model, nodes, now):
@@ -342,8 +445,88 @@ def _upsert_edges(relation_model, concepts, nodes, edges, strength_resolver):
       return out, created
 
 
-def add_concept(rxcui: str, **kwargs) -> object:
-      """Materialize ``rxcui`` and return the anchor RxNormConcept instance."""
+def materialize_concept_graph(
+          rxcui: str,
+          *,
+          client: Optional[RxNavClient] = None,
+          max_depth: int = 1,
+          max_total_nodes: int = 500,
+          chain_ttys: Iterable[str] = CHAIN_TTYS,
+          visited: Optional[set[str]] = None,
+          **kwargs: Any,
+) -> dict[str, MaterializeResult]:
+      """Chain-materialize ``rxcui`` and the concepts connected to it.
+
+      Breadth-first from ``rxcui``: each anchored concept exposes its neighbors
+      (restricted to ``chain_ttys``), which are themselves anchored, out to
+      ``max_depth`` hops.  Every :func:`materialize_concept` call flows through
+      the freshness skip, so a neighbor already anchored recently costs no
+      network I/O.
+
+      Loop safety
+      -----------
+      The RxNorm graph is cyclic (SCD ↔ SCDC ↔ IN …), so the walk is bounded by
+      three independent guards, any one of which terminates it:
+
+      * ``visited`` — a concept is anchored at most once per call; re-encounters
+        are dropped, which is what actually breaks cycles.
+      * ``max_depth`` — hop budget from the origin.
+      * ``max_total_nodes`` — hard ceiling on concepts anchored, so a
+        pathological family cannot fan out without bound.
+
+      Returns ``{rxcui: MaterializeResult}`` for every concept anchored.
+      """
+      client = client or RxNavClient()
+      keep = frozenset(chain_ttys)
+      visited = visited if visited is not None else set()
+      results: dict[str, MaterializeResult] = {}
+
+      queue: deque[tuple[str, int]] = deque([(rxcui, 0)])
+      while queue:
+            current, depth = queue.popleft()
+            if current in visited:
+                  continue
+            if len(visited) >= max_total_nodes:
+                  log.info(
+                        "materialize_concept_graph: node budget %d reached at %s",
+                        max_total_nodes, rxcui,
+                  )
+                  break
+            visited.add(current)
+
+            try:
+                  result = materialize_concept(current, client=client, **kwargs)
+            except Exception:  # noqa: BLE001 - one bad node must not sink the walk
+                  log.exception("Chain materialize failed for rxcui=%s", current)
+                  continue
+
+            results[current] = result
+            if result.anchor is None or depth >= max_depth:
+                  continue
+
+            # Enqueue connected concepts we have not already anchored.
+            for neighbor_cui, neighbor in result.concepts.items():
+                  if neighbor_cui in visited:
+                        continue
+                  if getattr(neighbor, "tty", None) in keep:
+                        queue.append((neighbor_cui, depth + 1))
+
+      return results
+
+
+def add_concept(rxcui: str, *, chain: bool = False, **kwargs) -> object:
+      """Materialize ``rxcui`` and return the anchor RxNormConcept instance.
+
+      With ``chain=True`` the connected concepts are materialized too (see
+      :func:`materialize_concept_graph`); chaining kwargs such as ``max_depth``
+      and ``max_total_nodes`` are forwarded.
+      """
+      if chain:
+            chain_keys = ("max_depth", "max_total_nodes", "chain_ttys", "visited")
+            chain_kwargs = {k: kwargs.pop(k) for k in chain_keys if k in kwargs}
+            results = materialize_concept_graph(rxcui, **chain_kwargs, **kwargs)
+            top = results.get(rxcui)
+            return top.anchor if top else None
       return materialize_concept(rxcui, **kwargs).anchor
 
 

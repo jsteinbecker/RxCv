@@ -266,7 +266,7 @@ def sync_product_from_external_sources(ndc: str) -> Product | None:
     # Do not run graph/network work while the DB transaction is open.
     if enrichment.concept_rxcui:
         try:
-            anchor = add_concept_by_ndc(ndc)
+            anchor = add_concept_by_ndc(ndc, chain=True)
             if anchor is not None:
                 product.concepts.add(anchor)
         except Exception:
@@ -278,7 +278,7 @@ def sync_product_from_external_sources(ndc: str) -> Product | None:
         try:
             result = link_product_from_setid_map(product, setid_index)
             if result is not None:
-                anchor = add_concept_by_ndc(ndc)
+                anchor = add_concept_by_ndc(ndc, chain=True)
                 if anchor is not None:
                     product.concepts.add(anchor)
         except Exception:

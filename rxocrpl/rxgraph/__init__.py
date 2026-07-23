@@ -32,6 +32,7 @@ from .pipeline import (
       add_concept_by_name,
       fetch_family,
       materialize_concept,
+      materialize_concept_graph,
 )
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
       "add_concept_by_name",
       "fetch_family",
       "materialize_concept",
+      "materialize_concept_graph",
 ]
 
 DEMO_RXCUI = "313782"  # Acetaminophen 325 MG Oral Tablet
