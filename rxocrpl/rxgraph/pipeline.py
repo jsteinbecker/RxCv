@@ -72,6 +72,14 @@ DEFAULT_TTYS: frozenset[str] = frozenset({"BN", "IN", "PIN", "SCD", "SCDG", "SCD
 #   SBD --has_ingredient-->       IN
 #   SCDG--inverse_isa-->          SCD    (SCDG sits above its dose-form SCDs)
 #   SCDG--has_ingredient-->       IN
+#   GPCK--contains-->             SCD    (generic kit's member clinical drugs)
+#   BPCK--contains-->             SBD    (branded kit's member branded drugs)
+#
+# BPCK/GPCK are intentionally NOT in DEFAULT_TTYS: widening the default
+# family fetch would pull unrelated packs into every ordinary SCD/SBD
+# lookup. Callers resolving a kit pass an explicit
+# tty_filter=DEFAULT_TTYS | {"BPCK", "GPCK"} instead (see
+# enrichment_service.sync_kit_components).
 EDGE_RULES: dict[str, list[tuple[str, frozenset[str]]]] = {
       "IN": [("has_tradename", frozenset({"BN"})),
              ("has_form", frozenset({"PIN"}))],
@@ -85,6 +93,8 @@ EDGE_RULES: dict[str, list[tuple[str, frozenset[str]]]] = {
       "SBD": [("has_ingredient", frozenset({"IN"}))],  # SCD↔SBD via SCD.has_tradename
       "SCDG": [("inverse_isa", frozenset({"SCD"})),
                ("has_ingredient", frozenset({"IN"}))],
+      "GPCK": [("contains", frozenset({"SCD"}))],
+      "BPCK": [("contains", frozenset({"SBD"}))],
 }
 
 # RxNav SUPPRESS values that mean "do not treat as an active concept".

@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 
 from rxocrpl.dailymed import get_dailymed_url
 from rxocrpl.integrity import check_for_products_without_ingredients
+from rxocrpl.model_classifiers.labeler_classifiers import LabelerClassifier
 
 from .models import (
       DoseForm,
@@ -284,6 +285,13 @@ def _mapping_rows_for_product (product):
                   seen.add(rxcui)
 
       return rows
+
+
+def quantified_form_enrichment (request):
+      from rxocrpl.enrichment_quant_scd import link_quantified_forms
+
+      result = link_quantified_forms(batch_size=1000)
+      return JsonResponse(result)
 
 
 def concept_graph_view (request, rxcui):
@@ -751,3 +759,18 @@ def claim_facility_view (request, pk):
             "state": "confirm",
             "existing_profile": request.user if request.user.facility_id else None,
       })
+
+
+def labeler_classifier_view (request):
+      """
+      A simple view to classify labelers based on their name patterns.
+      """
+      labelers = Labeler.objects.filter(active=True).order_by("name")
+
+      query = request.GET.get("q", "").strip()
+      if query:
+            labelers = labelers.filter(name__icontains=query)
+
+      classifier = LabelerClassifier()
+      results = classifier.classify_queryset(labelers)
+      return render(request, "rxocrpl/labeler_classifier.html", {"results": results})

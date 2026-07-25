@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="card">
+        <h1>Labeler Classifier</h1>
+        <p>Browse persisted classifications for active labelers.</p>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        {# ---- filter bar (GET, so filters live in the URL and are shareable) ---- #}
+        <form method="get" action="{% url 'aux:labeler_classifier' %}" class="filter-bar">
+            <label for="q">Search name</label>
+            <input type="search" id="q" name="q" value="{{ query }}" placeholder="Labeler name…">
+
+            <label for="determination">Determination</label>
+            <select id="determination" name="determination">
+                <option value="">All</option>
+                {% for value, label in determination_choices %}
+                    <option value="{{ value }}"
+                            {% if value == determination %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="min_confidence">Min confidence</label>
+            <input type="number" id="min_confidence" name="min_confidence"
+                   value="{{ min_confidence }}" step="0.05" min="0" max="1" placeholder="0.00">
+
+            <label for="min_products">Min products</label>
+            <input type="number" id="min_products" name="min_products"
+                   value="{{ min_products }}" min="0" placeholder="0">
+
+            <label for="order">Sort by</label>
+            <select id="order" name="order">
+                {% for value, label in order_choices %}
+                    <option value="{{ value }}"
+                            {% if value == order %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="button button-primary">Filter</button>
+            <a href="{% url 'aux:labeler_classifier' %}" class="button">Reset</a>
+        </form>
+
+        {# ---- summary + reclassify action ---- #}
+        <div class="card">
+            <span class="tag">{{ page_obj.paginator.count }}</span> matching
+            {% if total_count != page_obj.paginator.count %}
+                <span class="muted">of {{ total_count }} total</span>
+            {% endif %}
+
+            <form method="post" action="{% url 'aux:update_labeler_classifications' %}">
+                {% csrf_token %}
+                <button type="submit" class="button button-primary">
+                    Reclassify all active labelers
+                </button>
+            </form>
+        </div>
+
+        {# ---- results ---- #}
+        {% for row in page_obj %}
+            <div class="card" style="margin-top: 1rem;">
+                <h3>
+                    {{ row.labeler.name }}
+                    <span class="tag tag-{{ row.determination }}">
+                        {{ row.get_determination_display }}
+                    </span>
+                </h3>
+
+                <a href="{% url 'rxocrpl:labeler_detail' row.labeler.pk %}" class="button button-secondary">
+                    View labeler
+                </a>
+
+                <form method="post" action="{% url 'aux:deactivate_labeler' row.labeler.pk %}"
+                      style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="button button-danger"
+                            onclick="return confirm('Are you sure you want to deactivate this labeler?');">
+                        Deactivate
+                    </button>
+                </form>
+
+                <ul>
+                    <li><strong>Code:</strong> {{ row.labeler.labeler_code }}</li>
+                    <li><strong>Confidence:</strong> {{ row.confidence|floatformat:2 }}</li>
+                    <li><strong>Rx share:</strong>
+                        {% if row.rx_share is not None %}
+                            {{ row.rx_share|floatformat:2 }}
+                        {% else %}—{% endif %}
+                    </li>
+                    <li><strong>Products:</strong> {{ row.n_products }}
+                        ({{ row.rx_count }} rx / {{ row.otc_count }} otc /
+                        {{ row.unknown_count }} unknown)
+                    </li>
+                    <li><strong>Classified:</strong>
+                        {{ row.classified_at|date:"Y-m-d H:i" }}
+                        <span class="muted">({{ row.classifier_version }})</span>
+                    </li>
+                </ul>
+
+                {% if row.rx_examples or row.otc_examples or row.unknown_examples %}
+                    <details>
+                        <summary>Example products</summary>
+                        {% if row.rx_examples %}
+                            <p><strong>Rx:</strong> {{ row.rx_examples|join:", " }}</p>
+                        {% endif %}
+                        {% if row.otc_examples %}
+                            <p><strong>OTC:</strong> {{ row.otc_examples|join:", " }}</p>
+                        {% endif %}
+                        {% if row.unknown_examples %}
+                            <p><strong>Unknown:</strong> {{ row.unknown_examples|join:", " }}</p>
+                        {% endif %}
+                    </details>
+                {% endif %}
+            </div>
+        {% empty %}
+            <div class="card" style="margin-top: 1rem;">
+                <p>No classifications match those filters.</p>
+            </div>
+        {% endfor %}
+
+        {# ---- pagination, preserving current filters ---- #}
+        {% if page_obj.has_other_pages %}
+            <div class="pagination">
+                {% if page_obj.has_previous %}
+                    <a href="?{{ querystring }}&page={{ page_obj.previous_page_number }}"
+                       class="button">Previous</a>
+                {% endif %}
+                <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?{{ querystring }}&page={{ page_obj.next_page_number }}"
+                       class="button">Next</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

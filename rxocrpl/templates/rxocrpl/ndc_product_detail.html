@@ -84,6 +84,16 @@
             color: var(--fg-secondary);
         }
 
+        .route-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: var(--bg-app);
+            border: 1px solid var(--border-default);
+            color: var(--fg-secondary);
+        }
+
         .package {
             margin-bottom: 1rem;
             border: 1px solid var(--border-subtle);
@@ -151,15 +161,22 @@
     <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
             <div>
-                <h1 style="margin: 0;">{{ product.generic_name }}</h1>
+                <h1 style="margin: 0;">
+                    {{ product.as_substance }}
+                    {{ product.dosage_form }}
+                </h1>
                 {% if product.brand_name %}
-                    <p style="margin: 0.25rem 0; color: var(--fg-secondary); font-size: 1rem;">{{ product.brand_name }}</p>
+                    <p style="margin: 0.25rem 0; color: var(--fg-secondary); font-size: 1rem;">
+                        {{ product.brand_name }} |
+                        <b>{{ product.generic_name }}</b> |
+                        {% for route in product.route %}
+                            <span class="route-badge">{{ route|default:"—" }}</span>
+                        {% endfor %}
+                    </p>
                 {% endif %}
                 <div class="meta-row">
-                    <a href="{{ dailymed_url }}" target="_blank" rel="noopener noreferrer">View on DailyMed</a>
                     <span>NDC <strong><span class="ndc-badge">{{ product.product_ndc }}</span></strong></span>
                     <span>Form <strong>{{ product.dosage_form|default:"—" }}</strong></span>
-                    <span>Route <strong>{{ product.route|default:"—" }}</strong></span>
                     <span>Labeler
                         {% if product.labeler_id %}
                             <a href="{% url 'rxocrpl:labeler_detail' product.labeler_id %}"><strong>{{ product.labeler_name }}</strong></a>
@@ -167,7 +184,11 @@
                             <strong>{{ product.labeler_name|default:"—" }}</strong>
                         {% endif %}
                     </span>
-                    <span><a href="{% url 'admin:rxocrpl_product_change' product.pk %}">Admin Page</a></span>
+                    <div>
+                        <div><a href="{% url 'admin:rxocrpl_product_change' product.pk %}">Admin Page</a></div>
+                        <div><a href="{{ dailymed_url }}" target="_blank" rel="noopener noreferrer">View on DailyMed</a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -257,7 +278,8 @@
                             <td><span class="rxcui-code">{{ concept.rxcui }}</span></td>
                             <td>{{ concept.name }}</td>
                             <td><span class="tty-badge">{{ concept.tty }}</span></td>
-                            <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View Graph</a></td>
+                            <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View
+                                Graph</a></td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -267,7 +289,8 @@
             {% if obscure_concepts %}
                 <details style="margin-top: 1.25rem;">
                     <summary style="cursor: pointer; font-size: 0.85rem; color: var(--fg-muted); user-select: none;">
-                        {{ obscure_concepts|length }} combination product{{ obscure_concepts|length|pluralize }} (less directly related)
+                        {{ obscure_concepts|length }} combination product{{ obscure_concepts|length|pluralize }} (less
+                        directly related)
                     </summary>
                     <table style="margin-top: 0.75rem; opacity: 0.7;">
                         <thead>
@@ -284,7 +307,8 @@
                                 <td><span class="rxcui-code">{{ concept.rxcui }}</span></td>
                                 <td>{{ concept.name }}</td>
                                 <td><span class="tty-badge">{{ concept.tty }}</span></td>
-                                <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}" style="color: var(--brand);">View Graph</a></td>
+                                <td><a href="{% url 'rxocrpl:concept_graph' concept.rxcui %}"
+                                       style="color: var(--brand);">View Graph</a></td>
                             </tr>
                         {% endfor %}
                         </tbody>

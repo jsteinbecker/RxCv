@@ -39,7 +39,8 @@ INSTALLED_APPS = [
       'django.contrib.staticfiles',
       'rest_framework',
       # 'cv.apps.CvConfig',
-      'rxocrpl.apps.RxOcrPlConfig'
+      'rxocrpl.apps.RxOcrPlConfig',
+      'auxil.apps.AuxilConfig'
 ]
 
 MIDDLEWARE = [

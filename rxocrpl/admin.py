@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
@@ -15,6 +16,7 @@ from .models import (
       Organization,
       PackagedProduct,
       Product,
+      ProductComponent,
       ProductRxNormMapping,
       Role,
       RoleGrant,
@@ -223,6 +225,11 @@ class InlineIngredient(admin.TabularInline):
       extra = 0
 
 
+class ProductComponentInline(admin.TabularInline):
+      model = ProductComponent
+      extra = 0
+
+
 class InlinePackages(admin.TabularInline):
       model = PackagedProduct
       extra = 0
@@ -230,8 +237,71 @@ class InlinePackages(admin.TabularInline):
       readonly_fields = ["package_ndc", "description"]
 
 
+def _distinct_routes ():
+      """Collect the distinct route strings already stored across products."""
+      routes = set()
+      for values in Product.objects.values_list("route", flat=True):
+            if isinstance(values, list):
+                  routes.update(v for v in values if v)
+      return routes
+
+
+class RouteTagWidget(forms.SelectMultiple):
+      """A select2 tag-style multi-select for the Product.route JSON list."""
+
+      class Media:
+            css = {
+                  "screen": (
+                        "admin/css/vendor/select2/select2.min.css",
+                        "admin/css/autocomplete.css",
+                  )
+            }
+            js = (
+                  "admin/js/vendor/jquery/jquery.min.js",
+                  "admin/js/vendor/select2/select2.full.min.js",
+                  "admin/js/jquery.init.js",
+                  "rxocrpl/admin/route_tag_widget.js",
+            )
+
+      def __init__ (self, attrs=None, choices=()):
+            default_attrs = {
+                  "class": "route-tag-widget",
+                  "data-placeholder": "Search or add routes…",
+            }
+            if attrs:
+                  default_attrs.update(attrs)
+            super().__init__(default_attrs, choices)
+
+
+class RouteTagField(forms.MultipleChoiceField):
+      """MultipleChoiceField that accepts arbitrary (newly-typed) tag values."""
+
+      def valid_value (self, value):
+            return True
+
+
+class ProductAdminForm(forms.ModelForm):
+      route = RouteTagField(
+            required=False,
+            widget=RouteTagWidget,
+            help_text="Type to search existing routes or add new ones.",
+      )
+
+      class Meta:
+            model = Product
+            fields = "__all__"
+
+      def __init__ (self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            current = self.instance.route if isinstance(getattr(self.instance, "route", None), list) else []
+            values = sorted({*_distinct_routes(), *current})
+            self.fields["route"].choices = [(v, v) for v in values]
+            self.initial["route"] = current
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+      form = ProductAdminForm
       autocomplete_fields = ["concepts"]
       list_display = [
             "brand_name",
@@ -240,6 +310,7 @@ class ProductAdmin(admin.ModelAdmin):
             "labeler",
             "product_ndc",
             "dosage_form",
+            "route",
             "ingredient_count",
       ]
 
@@ -247,7 +318,7 @@ class ProductAdmin(admin.ModelAdmin):
             return super().get_queryset(request).filter(active=True)
 
       fieldsets = (
-            (None, {"fields": ("brand_name", "generic_name", "product_ndc", "dosage_form", "as_substance", "sync_button",)},),
+            (None, {"fields": ("brand_name", "generic_name", "product_ndc", "dosage_form", "route", "as_substance", "sync_button",)},),
             ("Labeler", {"fields": ("labeler", "labeler_name")}),
             ("Stats", {"fields": ("ingredient_count", "package_count")}),
             ("Concepts", {"fields": ("concepts",)}),
@@ -257,7 +328,7 @@ class ProductAdmin(admin.ModelAdmin):
       ]
 
       inlines = [
-            InlineIngredient, InlinePackages
+            InlineIngredient, ProductComponentInline, InlinePackages
       ]
       search_fields = ["brand_name", "generic_name", "product_ndc"]
       actions = ["enrich_from_outside_sources"]
@@ -419,11 +490,30 @@ class RxNormConceptAdmin(admin.ModelAdmin):
       def view_on_site (self, obj):
             return reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[obj.rxcui])
 
-      def _hierarchy_context (self, concept):
+      @staticmethod
+      def _parse_pages (request):
+            import json
+
+            raw = request.GET.get("pages")
+            if not raw:
+                  return {}
+            try:
+                  data = json.loads(raw)
+            except (ValueError, TypeError):
+                  return {}
+            if not isinstance(data, dict):
+                  return {}
+            return {
+                  str(k): int(v)
+                  for k, v in data.items()
+                  if isinstance(v, (int, float)) or (isinstance(v, str) and v.isdigit())
+            }
+
+      def _hierarchy_context (self, concept, pages=None):
             from .rxgraph.hierarchy import build_hierarchy
 
             return {
-                  **build_hierarchy(concept),
+                  **build_hierarchy(concept, pages),
                   "cytoscape_url": reverse("rxocrpl:concept_graph", args=[concept.rxcui]),
                   "change_url": reverse(
                         "admin:rxocrpl_rxnormconcept_change", args=[concept.rxcui]
@@ -454,9 +544,22 @@ class RxNormConceptAdmin(admin.ModelAdmin):
             from django.shortcuts import get_object_or_404, render
 
             concept = get_object_or_404(RxNormConcept, rxcui=rxcui)
+            pages = self._parse_pages(request)
+            hierarchy = self._hierarchy_context(concept, pages)
+
+            # In-place paging: return just the diagram body so the client can
+            # swap it without a full page reload (progressive fallback renders
+            # the whole page when ``partial`` is absent).
+            if request.GET.get("partial"):
+                  return render(
+                        request,
+                        "admin/rxocrpl/rxnormconcept/_hierarchy_body.html",
+                        hierarchy,
+                  )
+
             context = {
                   **self.admin_site.each_context(request),
-                  **self._hierarchy_context(concept),
+                  **hierarchy,
                   "title": f"Hierarchy · {concept.name or concept.rxcui}",
                   "opts": self.model._meta,
             }

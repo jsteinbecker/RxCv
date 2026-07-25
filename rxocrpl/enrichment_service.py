@@ -15,10 +15,13 @@ from rxocrpl.models import (
       Labeler,
       ListedIngredient,
       Product,
+      ProductComponent,
       ProductRxNormMapping,
+      RxNormConcept,
 )
-from rxocrpl.rxgraph.pipeline import add_concept_by_ndc
-from rxocrpl.rxnorm.enrichment import get_rxnorm_enrichment
+from rxocrpl.rxgraph.pipeline import DEFAULT_TTYS, add_concept_by_ndc, materialize_concept
+from rxocrpl.rxnorm.enrichment import RxNormEnrichment, get_rxnorm_enrichment
+from rxocrpl.rxnorm.parser import parse_rxnorm_string
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +144,88 @@ def update_product_ingredients (
       )
 
 
+def is_kit_dosage_form (dosage_form: str | None) -> bool:
+      return (dosage_form or "").strip().upper() == "KIT"
+
+
+def build_kit_components (enrichment: RxNormEnrichment) -> list[dict[str, Any]]:
+      """
+      Resolve a KIT's member drugs via its RxNorm BPCK/GPCK concept.
+
+      FDA's NDC ingredient data does not group ingredients by kit component,
+      so kits are resolved through RxNorm instead: a BPCK/GPCK concept's name
+      already encodes each member drug and its strength (e.g.
+      "{6 (azithromycin 250 MG Oral Tablet [Zithromax])} Pack [Z-PAK]"), and
+      its "contains" edges resolve each member to its own SCD/SBD concept.
+
+      Returns a list of plain dicts (no DB writes) -- see `save_kit_components`
+      for persistence. Returns [] if the NDC's concept isn't a resolvable pack.
+      """
+      concept = enrichment.concept
+      if not concept or concept.tty not in ("BPCK", "GPCK") or not concept.name:
+            return []
+
+      parsed = parse_rxnorm_string(concept.name)
+      if not parsed.is_pack or not parsed.pack_components:
+            return []
+
+      result = materialize_concept(concept.rxcui, tty_filter=DEFAULT_TTYS | {"BPCK", "GPCK"})
+      member_rxcui_by_name = {
+            relation.target.name: relation.target.rxcui
+            for relation in result.relations
+            if relation.rela == "contains" and relation.source_id == concept.rxcui
+      }
+
+      components = []
+      for sequence, pack_component in enumerate(parsed.pack_components):
+            sub = pack_component.parsed
+            components.append(
+                  {
+                        "sequence": sequence,
+                        "rxcui": member_rxcui_by_name.get(sub.raw),
+                        "name": sub.raw,
+                        "quantity": pack_component.quantity or "",
+                        "active_ingredients": [
+                              {
+                                    "name": ing.ingredient,
+                                    "strength": ing.strength_num or "",
+                                    "unit": ing.strength_unit or "",
+                              }
+                              for ing in sub.components
+                        ],
+                  }
+            )
+      return components
+
+
+def save_kit_components (product: Product, components: list[dict[str, Any]]) -> None:
+      product.components.all().delete()  # ty: ignore[unresolved-attribute]
+
+      if not components:
+            return
+
+      rxcuis = {c["rxcui"] for c in components if c["rxcui"]}
+      concepts_by_rxcui = (
+            {c.rxcui: c for c in RxNormConcept.objects.filter(rxcui__in=rxcuis)}
+            if rxcuis
+            else {}
+      )
+
+      ProductComponent.objects.bulk_create(
+            [
+                  ProductComponent(
+                        product=product,
+                        sequence=component["sequence"],
+                        rxnorm_concept=concepts_by_rxcui.get(component["rxcui"]),
+                        name=component["name"],
+                        active_ingredients=component["active_ingredients"],
+                        quantity=component["quantity"],
+                  )
+                  for component in components
+            ]
+      )
+
+
 def get_or_update_labeler (
           *,
           ndc: str,
@@ -163,7 +248,17 @@ def update_product_from_ndc_entry (
           entry: Any,
 ) -> Product:
       """Update a Product from a local NDC directory entry."""
-      ingredients = ingredients_from_ndc_entry(entry)
+      is_kit = is_kit_dosage_form(entry.dosage_form)
+      ingredients = [] if is_kit else ingredients_from_ndc_entry(entry)
+      if not is_kit:
+            print(ingredients or "No ingredients found for NDC entry:", entry)
+
+      # External RxNorm calls happen before opening the DB transaction.
+      kit_components = (
+            build_kit_components(get_rxnorm_enrichment(product.product_ndc))
+            if is_kit
+            else []
+      )
 
       with transaction.atomic():
             labeler = get_or_update_labeler(
@@ -198,6 +293,8 @@ def update_product_from_ndc_entry (
             )
 
             update_product_ingredients(product, ingredients)
+            if is_kit:
+                  save_kit_components(product, kit_components)
 
       return product
 
@@ -217,7 +314,8 @@ def sync_product_from_external_sources (ndc: str) -> Product | None:
             return None
 
       fda_product = fda_results[0]
-      ingredients = ingredients_from_fda_product(fda_product)
+      is_kit = is_kit_dosage_form(fda_product.dosage_form)
+      ingredients = [] if is_kit else ingredients_from_fda_product(fda_product)
 
       # This request is also intentionally outside the transaction.
       enrichment = get_rxnorm_enrichment(ndc)
@@ -225,6 +323,10 @@ def sync_product_from_external_sources (ndc: str) -> Product | None:
       concept = enrichment.concept if enrichment.concept_rxcui else None
       enrichment_dict = enrichment.to_dict() if enrichment.concept_rxcui else None
       setid_index = None if enrichment.concept_rxcui else load_setid_map()
+
+      # Kit components are resolved via RxNorm's BPCK/GPCK pack concept, not
+      # FDA's flat ingredient array -- also outside the transaction.
+      kit_components = build_kit_components(enrichment) if is_kit else []
 
       with transaction.atomic():
             labeler = get_or_update_labeler(
@@ -249,6 +351,9 @@ def sync_product_from_external_sources (ndc: str) -> Product | None:
                   product_ndc=ndc,
                   defaults=product_defaults,
             )
+
+            if is_kit:
+                  save_kit_components(product, kit_components)
 
             update_product_ingredients(product, ingredients)
 

@@ -89,6 +89,8 @@ class TermType(models.TextChoices):
       BN = "BN", "Branded Name"
       SBDC = "SBDC", "Semantic Branded Drug Component"
       SBD = "SBD", "Semantic Branded Drug"
+      BPCK = "BPCK", "Brand Name Pack"
+      GPCK = "GPCK", "Generic Pack"
 
 
 class RouteOfAdministration(models.TextChoices):
@@ -250,6 +252,17 @@ class Product(ComputedFieldsModel):
                   parts.append(self.dosage_form)
             return " ".join(parts)
 
+      @property
+      def is_kit (self) -> bool:
+            """True for FDA products whose dosage_form is a multi-item KIT.
+
+            A KIT is not a single drug with one strength profile -- it bundles
+            several distinct component products (e.g. a Z-Pak or Medrol
+            Dosepak). `active_ingredients` must not be treated as one drug's
+            ingredient list for these; see `as_substance` and `components`.
+            """
+            return (self.dosage_form or "").strip().upper() == "KIT"
+
       @classmethod
       def from_fda_result (cls, result: object) -> "Product":
             def _read (res, key, default=None):
@@ -305,6 +318,9 @@ class Product(ComputedFieldsModel):
             return []
 
       def as_substance (self) -> str:
+            if self.is_kit:
+                  return self._kit_substance()
+
             substances: list[SubstanceQuantity] = []
             for ing in self.active_ingredients:
                   try:
@@ -356,6 +372,17 @@ class Product(ComputedFieldsModel):
                   f"{s.substance.name.lower()} {self._format_strength(s.value, s.unit)}" for s in substances
             )
 
+      def _kit_substance (self) -> str:
+            """Build a substance string for a KIT from its resolved components.
+
+            Unlike a combination drug, a kit's ingredients don't belong to one
+            strength profile -- each component keeps its own. Returns "" (not
+            a merged fake SCD string) when no components have been
+            materialized yet, so callers fall back to `describe()`.
+            """
+            parts = [component.name for component in self.components.all() if component.name]
+            return " + ".join(parts)
+
       @staticmethod
       def _format_strength (value: float, unit: str) -> str:
             """Render a strength the way RxNorm does: bare integer if whole, upper-cased unit."""
@@ -381,6 +408,33 @@ class ListedIngredient(models.Model):
 
       def __str__ (self):
             return f"{self.name} {self.strength} {self.unit}"
+
+
+class ProductComponent(models.Model):
+      """A distinct sub-item of a KIT product (e.g. one drug in a Z-Pak).
+
+      Unlike `ListedIngredient`, which assumes all of a product's ingredients
+      belong to one strength profile, each `ProductComponent` is its own
+      drug with its own `active_ingredients`. Populated from the member
+      SCD/SBD concepts of a resolved RxNorm BPCK/GPCK pack, since FDA's NDC
+      ingredient data does not group ingredients by kit component.
+      """
+
+      product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="components")
+      sequence = models.PositiveIntegerField(default=0)
+      rxnorm_concept = models.ForeignKey(
+            RxNormConcept, on_delete=models.SET_NULL, null=True, blank=True
+      )
+      name = models.CharField(max_length=400)
+      active_ingredients = models.JSONField(default=list)  # List of ingredient dicts
+      quantity = models.CharField(max_length=100, blank=True)  # e.g. "6 TABLET"
+
+      class Meta:
+            ordering = ["sequence"]
+            app_label = "rxocrpl"
+
+      def __str__ (self):
+            return self.name
 
 
 class PackagedProduct(ComputedFieldsModel):
@@ -790,6 +844,7 @@ class ApprovedProductReconstitutionScheme(models.Model):
       """Approved reconstitution parameters for specific products at a facility."""
 
       product_ndcs = models.JSONField(default=list)  # List of NDCs this scheme applies to
+      concept = models.ForeignKey(RxNormConcept, on_delete=models.SET_NULL, null=True, blank=True)
       facility = models.ForeignKey(Facility, on_delete=models.CASCADE)
       user = models.ForeignKey(User, on_delete=models.CASCADE)
       whole_product_strength_mag = models.DecimalField(max_digits=12, decimal_places=4)

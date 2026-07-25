@@ -18,11 +18,10 @@ from django.contrib import admin
 from django.urls import path, include
 from . import views
 
+app_name = "aux"
+
 urlpatterns = [
-      path('', views.index, name='home'),
-      path('grappelli/', include('grappelli.urls')),
-      path('admin/', admin.site.urls),
-      path('rxocrpl/', include('rxocrpl.urls')),
-      path('aux/', include('auxil.urls')),
-      # path('cv/', include('cv.urls')),
+      path("labeler-classifications/", views.labeler_classifier_view, name="labeler_classifier"),
+      path("labeler-classifications/update/", views.create_and_update_labeler_classifications, name="update_labeler_classifications"),
+      path('<labeler_id>/deactivate-labeler/', views.deactivate_labeler, name="deactivate_labeler"),
 ]

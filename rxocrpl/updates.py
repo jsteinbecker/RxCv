@@ -8,7 +8,11 @@ except ImportError:
       except ImportError:
             raise ImportError("Could not import models from rxocrpl.models or .models")
 
-from django.db.models import Q, Count
+from django.db.models import Q, Count, F, Value
+from django.db.models.functions import Concat
+import re
+import ast
+from collections import Counter
 
 
 def rec (x) -> re.Pattern:
@@ -276,3 +280,10 @@ def move_rxcui_mappings_to_concepts_m2m ():
             if concept:
                   # Add the concept to the product's concepts M2M field
                   product.concepts.add(concept)
+
+
+def wrap_routes_in_brackets ():
+      res = Product.objects.exclude(route__startswith="[", route__endswith="]").update(
+            route=Concat(Value("["), F("route"), Value("]"))
+      )
+      return res
