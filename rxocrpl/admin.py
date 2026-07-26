@@ -318,8 +318,10 @@ class ProductAdmin(admin.ModelAdmin):
             return super().get_queryset(request).filter(active=True)
 
       fieldsets = (
-            (None, {"fields": ("brand_name", "generic_name", "product_ndc", "dosage_form", "route", "as_substance", "sync_button",)},),
-            ("Labeler", {"fields": ("labeler", "labeler_name")}),
+            (None, {"fields": (("brand_name", "generic_name", "product_ndc"),
+                               "dosage_form", "route",
+                               ("as_substance", "sync_button"))}),
+            ("Labeler", {"fields": (("labeler", "labeler_name"),)}),
             ("Stats", {"fields": ("ingredient_count", "package_count")}),
             ("Concepts", {"fields": ("concepts",)}),
       )
@@ -509,7 +511,8 @@ class RxNormConceptAdmin(admin.ModelAdmin):
                   if isinstance(v, (int, float)) or (isinstance(v, str) and v.isdigit())
             }
 
-      def _hierarchy_context (self, concept, pages=None):
+      @staticmethod
+      def _hierarchy_context (concept, pages=None):
             from .rxgraph.hierarchy import build_hierarchy
 
             return {

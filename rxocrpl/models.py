@@ -135,6 +135,7 @@ class DoseForm(models.TextChoices):
 
 class RxNormConcept(RxConceptTraversalMixin, ComputedFieldsModel):
       """RxNorm concept mapping."""
+
       rxcui = models.CharField(max_length=20, primary_key=True)
       name = models.CharField(max_length=255, null=True, blank=True)
       tty = models.CharField(max_length=10, choices=TermType.choices, null=True, blank=True)
@@ -147,7 +148,8 @@ class RxNormConcept(RxConceptTraversalMixin, ComputedFieldsModel):
                            depends=[("rxcui", [])], )
 
       class Meta:
-            app_label = "rxocrpl"
+            verbose_name = "Concept"
+            verbose_name_plural = "Concepts"
 
       def parsed (self) -> RxNormParts | None:
             return parse_rxnorm_string(self.name) if self.name else None
@@ -170,7 +172,8 @@ class RxNormConceptRelation(models.Model):
 
       class Meta:
             unique_together = ("source", "target", "rela")
-            app_label = "rxocrpl"
+            verbose_name = "Concept Relation"
+            verbose_name_plural = "Concept Relations"
 
       def __str__ (self):
             return f"{self.source.rxcui} -[{self.rela}]-> {self.target.rxcui}"
@@ -332,9 +335,8 @@ class Product(ComputedFieldsModel):
                         unit = ing.get("unit", "")
                         full_str = f"{strength} {unit}".strip()
 
-                        # Check for non-simplified concentrations like "500 mg / 5 mL"
                         match = re.search(
-                              r"(.+?)\s*/\s*(\d+(?:\.\d+)?)\s*([A-Za-zµμ]*)",
+                              r"(.+?)\s*/\s*(\d*\.?\d+)\s*([A-Za-zµμ]*)",
                               full_str,
                               re.IGNORECASE,
                         )
@@ -354,6 +356,21 @@ class Product(ComputedFieldsModel):
 
                         if "/" in q.unit and q.dimension.is_dimensionless:
                               q = q.to("%")
+
+                        name = re.sub(r"\.Alpha\.", "α", name, flags=re.IGNORECASE)
+                        name = re.sub(r"\.Beta\.", "β", name, flags=re.IGNORECASE)
+                        name = re.sub(r"\.Gamma\.", "γ", name, flags=re.IGNORECASE)
+                        name = re.sub(r"\.Delta\.", "δ", name, flags=re.IGNORECASE)
+                        name = re.sub(r"\.Mu\.", "μ", name, flags=re.IGNORECASE)
+                        name = re.sub(r"\.Omega\.", "ω", name, flags=re.IGNORECASE)
+
+                        # Sterochemical Prefixes move to front
+                        name = re.sub(
+                              r"^\s*(.+?)\s*,\s*((?:DL|LD|D|L)-)(\s*(?:\(.*\))?)\s*$",
+                              lambda m: f"{m.group(2).upper()}{m.group(1)}{m.group(3)}",
+                              name,
+                              flags=re.IGNORECASE,
+                        )
 
                         substances.append(
                               SubstanceQuantity(value=q.value, unit=q.unit, substance=Substance(name=name))
@@ -409,6 +426,17 @@ class ListedIngredient(models.Model):
       def __str__ (self):
             return f"{self.name} {self.strength} {self.unit}"
 
+      def normalize_strength (self):
+            try:
+                  if re.match(r"^\.\d+", self.strength):
+                        self.strength = "0" + self.strength
+            except Exception:
+                  pass
+
+      def save (self, *args, **kwargs):
+            self.normalize_strength()
+            super().save(*args, **kwargs)
+
 
 class ProductComponent(models.Model):
       """A distinct sub-item of a KIT product (e.g. one drug in a Z-Pak).
@@ -422,16 +450,14 @@ class ProductComponent(models.Model):
 
       product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="components")
       sequence = models.PositiveIntegerField(default=0)
-      rxnorm_concept = models.ForeignKey(
-            RxNormConcept, on_delete=models.SET_NULL, null=True, blank=True
-      )
+      rxnorm_concept = models.ForeignKey(RxNormConcept, on_delete=models.SET_NULL, null=True, blank=True)
       name = models.CharField(max_length=400)
       active_ingredients = models.JSONField(default=list)  # List of ingredient dicts
       quantity = models.CharField(max_length=100, blank=True)  # e.g. "6 TABLET"
 
       class Meta:
             ordering = ["sequence"]
-            app_label = "rxocrpl"
+            db_table = "rxocrpl_productcomponent"
 
       def __str__ (self):
             return self.name
@@ -440,9 +466,7 @@ class ProductComponent(models.Model):
 class PackagedProduct(ComputedFieldsModel):
       """Packaged product details."""
 
-      product = models.ForeignKey(
-            Product, on_delete=models.CASCADE, related_name="packaged_products"
-      )
+      product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="packaged_products")
       package_code = models.CharField(max_length=2)
       description = models.CharField(max_length=400)
       active = models.BooleanField(default=True)
@@ -501,9 +525,7 @@ class CspOrder(models.Model):
 class VerificationImage(models.Model):
       """Additional images verified against the reference inventory."""
 
-      order = models.ForeignKey(
-            CspOrder, related_name="verification_images", on_delete=models.CASCADE
-      )
+      order = models.ForeignKey(CspOrder, related_name="verification_images", on_delete=models.CASCADE)
       image = models.FileField(upload_to="orders/verification/")
 
       def __str__ (self):
@@ -624,10 +646,6 @@ class Organization(models.Model):
 
       name = models.CharField(max_length=255)
 
-      class Meta:
-            verbose_name_plural = "Organizations"
-            app_label = "rxocrpl"
-
       def __str__ (self):
             return self.name
 
@@ -638,9 +656,6 @@ class Role(models.Model):
       name = models.CharField(max_length=50, unique=True)
       description = models.TextField(blank=True)
 
-      class Meta:
-            app_label = "rxocrpl"
-
       def __str__ (self):
             return self.name
 
@@ -649,25 +664,15 @@ class Facility(models.Model):
       """Pharmacy facility or hospital unit (CareLocation)."""
 
       name = models.CharField(max_length=255)
-      organization = models.ForeignKey(
-            Organization,
-            on_delete=models.CASCADE,
-            related_name="facilities",
-            null=True,
-            blank=True,
-      )
-      parent = models.ForeignKey(
-            "self", on_delete=models.CASCADE, null=True, blank=True, related_name="children"
-      )
+      organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="facilities",
+                                       null=True, blank=True,)
+      parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
       facility_type = models.CharField(max_length=100, null=True, blank=True)
-      org = models.CharField(
-            max_length=255, null=True, blank=True, help_text="Legacy organization field"
-      )
+      org = models.CharField(max_length=255, null=True, blank=True, help_text="Legacy organization field")
       admin_id = models.CharField(max_length=100, null=True, blank=True)
 
       class Meta:
             verbose_name_plural = "Facilities"
-            app_label = "rxocrpl"
 
       def __str__ (self):
             return self.name
@@ -696,43 +701,19 @@ class RoleGrant(models.Model):
 
       user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="role_grants")
       role = models.ForeignKey(Role, on_delete=models.CASCADE)
-
       # Scope: org_id OR facility_id, never both (enforce via check constraint / clean())
-      organization = models.ForeignKey(
-            Organization, on_delete=models.CASCADE, null=True, blank=True
-      )
-      facility = models.ForeignKey(
-            Facility, on_delete=models.CASCADE, null=True, blank=True
-      )
-
-      granted_by = models.ForeignKey(
-            User,
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name="granted_permissions",
-      )
+      organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=True)
+      facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
+      granted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="granted_permissions",)
       granted_at = models.DateTimeField(auto_now_add=True)
-
-      revoked_by = models.ForeignKey(
-            User,
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name="revoked_permissions",
-      )
+      revoked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="revoked_permissions",)
       revoked_at = models.DateTimeField(null=True, blank=True)
-
-      expires_at = models.DateTimeField(
-            null=True, blank=True, help_text="Optional, for time-boxed elevated access"
-      )
-      reason = models.TextField(
-            blank=True,
-            help_text="Optional. Must be 'system_bootstrap' when granted_by is null.",
-      )
+      expires_at = models.DateTimeField(null=True, blank=True, help_text="Optional, for time-boxed elevated access")
+      reason = models.TextField(blank=True, help_text="Optional. Must be 'system_bootstrap' when granted_by is null.",)
 
       class Meta:
-            app_label = "rxocrpl"
             constraints = [
                   models.CheckConstraint(
                         condition=(
@@ -832,9 +813,6 @@ class RoleGrantEvent(models.Model):
       timestamp = models.DateTimeField(auto_now_add=True)
       actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
       notes = models.TextField(blank=True)
-
-      class Meta:
-            app_label = "rxocrpl"
 
       def __str__ (self):
             return f"{self.event_type} on {self.grant.id} at {self.timestamp}"

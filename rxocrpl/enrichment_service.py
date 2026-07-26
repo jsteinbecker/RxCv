@@ -19,13 +19,17 @@ from rxocrpl.models import (
       ProductRxNormMapping,
       RxNormConcept,
 )
-from rxocrpl.rxgraph.pipeline import DEFAULT_TTYS, add_concept_by_ndc, materialize_concept
-from rxocrpl.rxnorm.enrichment import RxNormEnrichment, get_rxnorm_enrichment
-from rxocrpl.rxnorm.parser import parse_rxnorm_string
+from rxocrpl.rxgraph.pipeline import add_concept_by_ndc
+from rxocrpl.rxnorm.enrichment import get_rxnorm_enrichment
 
 logger = logging.getLogger(__name__)
 
 STRENGTH_RE = re.compile(r"^\s*(?P<strength>\d*\.\d+|\d+(?:\.\d+)?)\s*(?P<unit>.*?)\s*$")
+
+_KIT_COMPONENT_SEGMENT_RE = re.compile(
+      r"(?P<qty>[\d.]+)\s+(?P<unit>[A-Za-z%]+)\s+in\s+(?P<count>\d+)\s+"
+      r"(?P<container>[A-Za-z][A-Za-z,\- ]*?)\s*\(\s*(?P<ndc>\d{4,5}-\d{3,4}-\d{1,2})\s*\)"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,54 +152,94 @@ def is_kit_dosage_form (dosage_form: str | None) -> bool:
       return (dosage_form or "").strip().upper() == "KIT"
 
 
-def build_kit_components (enrichment: RxNormEnrichment) -> list[dict[str, Any]]:
+def extract_kit_component_ndcs (fda_product: Any) -> list[tuple[str, str]]:
       """
-      Resolve a KIT's member drugs via its RxNorm BPCK/GPCK concept.
+      Extract a KIT's nested component NDCs (and their pack quantity) from its
+      openFDA packaging descriptions.
 
-      FDA's NDC ingredient data does not group ingredients by kit component,
-      so kits are resolved through RxNorm instead: a BPCK/GPCK concept's name
-      already encodes each member drug and its strength (e.g.
-      "{6 (azithromycin 250 MG Oral Tablet [Zithromax])} Pack [Z-PAK]"), and
-      its "contains" edges resolve each member to its own SCD/SBD concept.
-
-      Returns a list of plain dicts (no DB writes) -- see `save_kit_components`
-      for persistence. Returns [] if the NDC's concept isn't a resolvable pack.
+      A KIT's packaging description enumerates every nested item, e.g.
+      "1 KIT in 1 KIT (85766-065-01) / 1 mL in 1 VIAL (0378-8065-32) / 1 mL in
+      1 SYRINGE (0378-8066-32)". The first NDC always shares the KIT's own
+      product NDC -- that's just the kit's outer packaging, not a component --
+      so it's excluded; every other embedded NDC identifies an actual bundled
+      item. Returns a list of (ndc, quantity) tuples in description order,
+      e.g. [("0378-8065-32", "1 VIAL"), ("0378-8066-32", "1 SYRINGE")].
       """
-      concept = enrichment.concept
-      if not concept or concept.tty not in ("BPCK", "GPCK") or not concept.name:
-            return []
+      own_product_ndc = fda_product.product_ndc or ""
+      seen: set[str] = set()
+      components: list[tuple[str, str]] = []
 
-      parsed = parse_rxnorm_string(concept.name)
-      if not parsed.is_pack or not parsed.pack_components:
-            return []
+      for packaging in fda_product.packaging or []:
+            for match in _KIT_COMPONENT_SEGMENT_RE.finditer(packaging.description or ""):
+                  ndc = match.group("ndc")
+                  if ndc in seen:
+                        continue
+                  product_portion = "-".join(ndc.split("-")[:2])
+                  if product_portion == own_product_ndc:
+                        continue
+                  seen.add(ndc)
+                  quantity = f"{match.group('count')} {match.group('container')}".strip()
+                  components.append((ndc, quantity))
 
-      result = materialize_concept(concept.rxcui, tty_filter=DEFAULT_TTYS | {"BPCK", "GPCK"})
-      member_rxcui_by_name = {
-            relation.target.name: relation.target.rxcui
-            for relation in result.relations
-            if relation.rela == "contains" and relation.source_id == concept.rxcui
-      }
-
-      components = []
-      for sequence, pack_component in enumerate(parsed.pack_components):
-            sub = pack_component.parsed
-            components.append(
-                  {
-                        "sequence": sequence,
-                        "rxcui": member_rxcui_by_name.get(sub.raw),
-                        "name": sub.raw,
-                        "quantity": pack_component.quantity or "",
-                        "active_ingredients": [
-                              {
-                                    "name": ing.ingredient,
-                                    "strength": ing.strength_num or "",
-                                    "unit": ing.strength_unit or "",
-                              }
-                              for ing in sub.components
-                        ],
-                  }
-            )
       return components
+
+
+def resolve_kit_component_ndc (ndc: str) -> dict[str, Any] | None:
+      """
+      Resolve one of a KIT's embedded component NDCs to component data.
+
+      openFDA is tried first since it carries structured ingredient/strength
+      data. RxNorm/RxNav is only queried when openFDA has no record for the
+      NDC -- common for devices, diluents, or older repackaged items that
+      never made it into the NDC directory. Returns None if neither source
+      knows the NDC.
+      """
+      fda_results = lookup_ndc_package(ndc)
+      if fda_results:
+            fda_component = fda_results[0]
+            ingredients = ingredients_from_fda_product(fda_component)
+            return {
+                  "rxcui": None,
+                  "name": fda_component.generic_name or fda_component.brand_name or "",
+                  "active_ingredients": [ingredient.as_dict() for ingredient in ingredients],
+            }
+
+      enrichment = get_rxnorm_enrichment(ndc)
+      if enrichment.concept:
+            return {
+                  "rxcui": enrichment.concept_rxcui,
+                  "name": enrichment.concept.name or "",
+                  "active_ingredients": [],
+            }
+
+      return None
+
+
+def build_kit_components_from_fda_product (fda_product: Any) -> list[dict[str, Any]]:
+      """
+      Resolve a KIT's member products from its own packaging description.
+
+      Returns a list of plain dicts (no DB writes) -- see
+      `save_kit_components` for persistence. Returns [] when the packaging
+      description has no resolvable component NDCs.
+      """
+      components: list[dict[str, Any]] = []
+      for sequence, (ndc, quantity) in enumerate(extract_kit_component_ndcs(fda_product)):
+            resolved = resolve_kit_component_ndc(ndc)
+            if resolved is None:
+                  continue
+            resolved["sequence"] = sequence
+            resolved["quantity"] = quantity
+            components.append(resolved)
+      return components
+
+
+def build_kit_components (ndc: str) -> list[dict[str, Any]]:
+      """Fetch *ndc*'s own openFDA record and resolve its KIT components."""
+      fda_results = lookup_ndc_package(ndc)
+      if not fda_results:
+            return []
+      return build_kit_components_from_fda_product(fda_results[0])
 
 
 def save_kit_components (product: Product, components: list[dict[str, Any]]) -> None:
@@ -253,12 +297,8 @@ def update_product_from_ndc_entry (
       if not is_kit:
             print(ingredients or "No ingredients found for NDC entry:", entry)
 
-      # External RxNorm calls happen before opening the DB transaction.
-      kit_components = (
-            build_kit_components(get_rxnorm_enrichment(product.product_ndc))
-            if is_kit
-            else []
-      )
+      # External FDA/RxNorm calls happen before opening the DB transaction.
+      kit_components = build_kit_components(product.product_ndc) if is_kit else []
 
       with transaction.atomic():
             labeler = get_or_update_labeler(
@@ -324,9 +364,9 @@ def sync_product_from_external_sources (ndc: str) -> Product | None:
       enrichment_dict = enrichment.to_dict() if enrichment.concept_rxcui else None
       setid_index = None if enrichment.concept_rxcui else load_setid_map()
 
-      # Kit components are resolved via RxNorm's BPCK/GPCK pack concept, not
-      # FDA's flat ingredient array -- also outside the transaction.
-      kit_components = build_kit_components(enrichment) if is_kit else []
+      # Kit components are resolved from the KIT's own packaging description,
+      # not FDA's flat ingredient array -- also outside the transaction.
+      kit_components = build_kit_components_from_fda_product(fda_product) if is_kit else []
 
       with transaction.atomic():
             labeler = get_or_update_labeler(

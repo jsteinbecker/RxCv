@@ -24,5 +24,5 @@ urlpatterns = [
       path('admin/', admin.site.urls),
       path('rxocrpl/', include('rxocrpl.urls')),
       path('aux/', include('auxil.urls')),
-      # path('cv/', include('cv.urls')),
+      
 ]
