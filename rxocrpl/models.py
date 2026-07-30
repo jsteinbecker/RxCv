@@ -226,6 +226,11 @@ class Product(ComputedFieldsModel):
       active_ingredients = models.JSONField(default=list)  # List of ingredient dicts
       ingredient_count = ComputedField(models.PositiveIntegerField(default=0),
                                        depends=[("active_ingredients", [])], compute=lambda self: len(self.active_ingredients))
+      possible_brands = ComputedField(
+            models.CharField(max_length=400, blank=True, default=""),
+            depends=[("active_ingredients", []), ("dosage_form", [])],
+            compute=lambda self: self._compute_possible_brands(),
+      )
       rxcui_mapping = models.JSONField(default=dict)  # Mapping of NDC to RxCUI info
       active = models.BooleanField(default=True)
       concepts = models.ManyToManyField(RxNormConcept, related_name="products")
@@ -407,6 +412,125 @@ class Product(ComputedFieldsModel):
             if unit == "%":
                   return f"{value_str}%"
             return f"{value_str} {unit.upper()}"
+
+      @staticmethod
+      def _ingredient_name_set (active_ingredients: list) -> frozenset:
+            """Normalized set of ingredient names, for matching drugs with identical formulas."""
+            names = set()
+            for ing in active_ingredients or []:
+                  name = (ing.get("name") or ing.get("ingredient") or "").strip().upper()
+                  if name:
+                        names.add(name)
+            return frozenset(names)
+
+      def _dose_form_matches (self, concept: "RxNormConcept", rxnorm_dose_form: str) -> bool:
+            parsed = concept.parsed()
+            return bool(parsed and parsed.dose_form and parsed.dose_form.lower() == rxnorm_dose_form.lower())
+
+      def _rxnorm_chain_brand_names (self) -> set:
+            """Brand names reachable from this product's linked RxNormConcept(s)
+            via a BN, SBD, or SBDC target, gated on the chain concept's own
+            dose form matching this product's dosage_form.
+
+            Takes precedence over the ingredient-set heuristic below when
+            non-empty, since a materialized RxNorm chain is a stronger signal
+            than an inferred ingredient/dosage_form match.
+            """
+            from rxocrpl.local_rxnorm_linker import guess_rxnorm_dose_form
+
+            rxnorm_dose_form = guess_rxnorm_dose_form(self)
+            if not rxnorm_dose_form:
+                  return set()
+
+            anchors = list(self.concepts.all())
+            if not anchors:
+                  return set()
+
+            # GPCK/BPCK anchors aren't themselves SCD/SBD -- resolve to their
+            # member drugs first.
+            expanded = []
+            for concept in anchors:
+                  if concept.tty in ("GPCK", "BPCK"):
+                        member_ids = RxNormConceptRelation.objects.filter(
+                              source=concept, rela="contains"
+                        ).values_list("target_id", flat=True)
+                        expanded.extend(RxNormConcept.objects.filter(pk__in=member_ids))
+                  else:
+                        expanded.append(concept)
+
+            names = set()
+            for concept in expanded:
+                  if not self._dose_form_matches(concept, rxnorm_dose_form):
+                        continue
+
+                  # SCD/SCDC --has_tradename--> SBD/SBDC
+                  target_ids = RxNormConceptRelation.objects.filter(
+                        source=concept, rela="has_tradename", target__tty__in=("SBD", "SBDC")
+                  ).values_list("target_id", flat=True)
+                  for target in RxNormConcept.objects.filter(pk__in=target_ids):
+                        if self._dose_form_matches(target, rxnorm_dose_form):
+                              parsed = target.parsed()
+                              names.add((parsed.brand_name if parsed else None) or target.name)
+
+                  # IN --has_tradename--> BN (bare trade names carry no dose form
+                  # of their own; trusted because `concept`'s dose form already
+                  # matched above)
+                  ingredient_ids = RxNormConceptRelation.objects.filter(
+                        source=concept, rela="has_ingredient", target__tty="IN"
+                  ).values_list("target_id", flat=True)
+                  bn_ids = RxNormConceptRelation.objects.filter(
+                        source_id__in=ingredient_ids, rela="has_tradename", target__tty="BN"
+                  ).values_list("target_id", flat=True)
+                  names.update(RxNormConcept.objects.filter(pk__in=bn_ids).values_list("name", flat=True))
+
+                  # SCD --consists_of--> SCDC --has_tradename--> SBDC
+                  component_ids = RxNormConceptRelation.objects.filter(
+                        source=concept, rela="consists_of", target__tty="SCDC"
+                  ).values_list("target_id", flat=True)
+                  sbdc_ids = RxNormConceptRelation.objects.filter(
+                        source_id__in=component_ids, rela="has_tradename", target__tty="SBDC"
+                  ).values_list("target_id", flat=True)
+                  for target in RxNormConcept.objects.filter(pk__in=sbdc_ids):
+                        if self._dose_form_matches(target, rxnorm_dose_form):
+                              parsed = target.parsed()
+                              names.add((parsed.brand_name if parsed else None) or target.name)
+
+            return {n for n in names if n}
+
+      def _compute_possible_brands (self) -> str:
+            """"&&"-separated brand names of products sharing this product's
+            ingredients and dosage_form -- e.g. a generic Diazepam Tablet
+            resolves to "Valium" even though it has no brand_name itself.
+
+            If a materialized RxNorm concept chain reaches a BN/SBD/SBDC with
+            a matching dosage form, that takes precedence.
+            """
+            rxnorm_brands = self._rxnorm_chain_brand_names()
+            if rxnorm_brands:
+                  return " && ".join(sorted(rxnorm_brands))
+
+            self_names = self._ingredient_name_set(self.active_ingredients)
+            if not self_names or not self.dosage_form:
+                  return ""
+
+            candidates = (
+                  Product.objects.filter(dosage_form=self.dosage_form)
+                  .exclude(brand_name__isnull=True)
+                  .exclude(brand_name="")
+                  .exclude(pk=self.pk)
+                  .values_list("brand_name", "generic_name", "active_ingredients")
+            )
+
+            # FDA data sets brand_name = generic_name for plain generics, so
+            # skip those -- only a brand_name that actually differs from the
+            # generic name represents a real trade name (e.g. "Valium").
+            brands = {
+                  brand_name
+                  for brand_name, generic_name, ingredients in candidates
+                  if brand_name.strip().upper() != (generic_name or "").strip().upper()
+                  and self._ingredient_name_set(ingredients) == self_names
+            }
+            return " && ".join(sorted(brands))
 
       @property
       def dailymed_url (self) -> str:

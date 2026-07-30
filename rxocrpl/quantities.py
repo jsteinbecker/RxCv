@@ -287,7 +287,7 @@ class Quantity:
             sym: str
             if isinstance(value, str):
                   mag_regex = re.compile(
-                        r"^\s*([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*(.+)\s*$"
+                        r"^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(.+)\s*$"
                   )
                   match = mag_regex.match(value)
                   if not match:
