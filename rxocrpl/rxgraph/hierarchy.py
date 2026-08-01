@@ -25,7 +25,6 @@ from textwrap import wrap
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
-from django.db.models import Q
 from django.urls import reverse
 
 if TYPE_CHECKING:
@@ -413,7 +412,8 @@ def _collect_branches(
       Each branch shows one page (``MAX_PER_BRANCH`` cards) of its members; the
       current page per branch is taken from ``pages`` (keyed by
       ``"<direction>:<rela>:<hop>"``). Returns the branches plus the set of
-      every rxcui appearing in the ego graph (used to find connected products).
+      every rxcui appearing in the ego graph (used to find connected products). ``query`` carries the per-branch
+      page state (``pg_<key>`` params) so overflow can be paged in place.
       """
       from rxocrpl.models import RxNormConceptRelation
 
@@ -536,7 +536,8 @@ def _collect_product_branch(
       current page is taken from ``pages`` (keyed by ``"products"``). Returns
       the branch, a mapping of product-NDC -> the rxcui it is tied to (so the
       caller can route each product's connector to the right concept card), and
-      the true total number of distinct connected products.
+      the true total number of distinct connected products. Overflow
+      is paged in place via the ``pg_products`` query param.
       """
       from rxocrpl.models import Product, ProductRxNormMapping
 
@@ -545,7 +546,6 @@ def _collect_product_branch(
                   "rxcui", "product_ndc"
             )
       )
-      total_products = len({m.product_ndc for m in mappings})
       if not mappings:
             return None, {}, 0
 
@@ -556,6 +556,7 @@ def _collect_product_branch(
       # Build one card per distinct product (deduped, order preserved).
       all_cards: list[Card] = []
       ndc_to_rxcui: dict[str, str] = {}
+      items: list[tuple[str, str, str]] = []  # (ndc, label, tie)
       seen: set[str] = set()
       for m in mappings:
             if m.product_ndc in seen:
@@ -683,7 +684,10 @@ def build_hierarchy(
       ``MAX_PER_BRANCH`` cards each and expose a "more" card that advances the
       cursor. Returns a context dict ready to hand to the template: SVG
       dimensions, the hub, positioned cards, connectors, a legend and summary
-      counts.
+      counts. ``query``
+      (typically ``request.GET``) supplies each branch's ``pg_<key>`` page so
+      overflow nodes are paged in place rather than punting to the interactive
+      graph.
       """
       pages = pages or {}
       branches, ego_rxcuis = _collect_branches(concept, pages)
