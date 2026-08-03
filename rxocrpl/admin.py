@@ -313,6 +313,8 @@ class ProductAdmin(admin.ModelAdmin):
             "route",
             "ingredient_count",
       ]
+      filter_horizontal = ["concepts"]
+      list_filter = ["labeler", "dosage_form", "route"]
 
       def get_queryset (self, request):
             return super().get_queryset(request).filter(active=True)
@@ -341,6 +343,7 @@ class ProductAdmin(admin.ModelAdmin):
       def formfield_for_manytomany (self, db_field, request, **kwargs):
             formfield = super().formfield_for_manytomany(db_field, request, **kwargs)
             if db_field.name == "concepts" and formfield:
+                  formfield.required = False
                   formfield.widget.attrs["data-change-url-template"] = reverse(
                         "admin:rxocrpl_rxnormconcept_change",
                         args=["__value__"],

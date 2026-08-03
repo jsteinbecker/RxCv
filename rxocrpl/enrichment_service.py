@@ -21,8 +21,30 @@ from rxocrpl.models import (
 )
 from rxocrpl.rxgraph.pipeline import add_concept_by_ndc
 from rxocrpl.rxnorm.enrichment import get_rxnorm_enrichment
+from rxocrpl.rxnorm.parser import parse_rxnorm_string
 
 logger = logging.getLogger(__name__)
+
+# Ordered so more specific dose-form keywords (e.g. "Injectable Suspension")
+# are checked before broader ones. RxNorm dose forms don't carry a route
+# field of their own, so route is inferred from the words in the dose form.
+_DOSE_FORM_ROUTE_KEYWORDS = [
+      ("Ophthalmic", "OPHTHALMIC"),
+      ("Otic", "OTIC"),
+      ("Nasal", "NASAL"),
+      ("Inhalant", "RESPIRATORY (INHALATION)"),
+      ("Inhaler", "RESPIRATORY (INHALATION)"),
+      ("Rectal", "RECTAL"),
+      ("Vaginal", "VAGINAL"),
+      ("Buccal", "BUCCAL"),
+      ("Sublingual", "SUBLINGUAL"),
+      ("Transdermal", "TRANSDERMAL"),
+      ("Topical", "TOPICAL"),
+      ("Injectable", "INTRAVENOUS"),
+      ("Injection", "INTRAVENOUS"),
+      ("Prefilled Syringe", "INTRAVENOUS"),
+      ("Oral", "ORAL"),
+]
 
 STRENGTH_RE = re.compile(r"^\s*(?P<strength>\d*\.\d+|\d+(?:\.\d+)?)\s*(?P<unit>.*?)\s*$")
 
@@ -124,6 +146,62 @@ def ingredients_from_ndc_entry (entry: Any) -> list[IngredientData]:
             )
 
       return ingredients
+
+
+def route_from_dose_form (dose_form: str | None) -> list[str]:
+      if not dose_form:
+            return []
+
+      for keyword, route in _DOSE_FORM_ROUTE_KEYWORDS:
+            if keyword.lower() in dose_form.lower():
+                  return [route]
+
+      return []
+
+
+def ingredients_from_generic_name (generic_name: str) -> list[IngredientData]:
+      parsed = parse_rxnorm_string(generic_name)
+
+      ingredients: list[IngredientData] = []
+      for component in parsed.components:
+            unit = component.strength_unit or ""
+            if component.denom_unit:
+                  denom_num = f"{component.denom_num} " if component.denom_num else ""
+                  unit = f"{unit}/{denom_num}{component.denom_unit}"
+
+            ingredients.append(
+                  IngredientData(
+                        name=component.ingredient.strip(),
+                        strength=component.strength_num or "",
+                        unit=unit,
+                  )
+            )
+
+      return ingredients
+
+
+def fallback_from_generic_name (
+          generic_name: str | None,
+) -> tuple[list[IngredientData], str, list[str]]:
+      """
+      Last-resort recovery of ingredients, dosage form, and route from a
+      generic_name string when FDA/RxNorm returned none of them.
+
+      Only works when generic_name follows the normalized RxNorm naming
+      convention (e.g. "Metformin 500 MG Oral Tablet"); anything else parses
+      to empty results and is simply not used.
+      """
+      if not generic_name:
+            return [], "", []
+
+      parsed = parse_rxnorm_string(generic_name)
+      if parsed.is_pack:
+            return [], "", []
+
+      dosage_form = parsed.dose_form or ""
+      route = route_from_dose_form(dosage_form)
+      ingredients = ingredients_from_generic_name(generic_name)
+      return ingredients, dosage_form, route
 
 
 def update_product_ingredients (
@@ -356,6 +434,19 @@ def sync_product_from_external_sources (ndc: str) -> Product | None:
       fda_product = fda_results[0]
       is_kit = is_kit_dosage_form(fda_product.dosage_form)
       ingredients = [] if is_kit else ingredients_from_fda_product(fda_product)
+      dosage_form = fda_product.dosage_form or ""
+      route = fda_product.route or []
+
+      # If FDA/RxNorm didn't give us ingredients, dosage form, or route,
+      # fall back to parsing generic_name -- it's sometimes already in
+      # RxNorm's normalized "<ingredient> <strength> <dose form>" shape.
+      if not is_kit and (not ingredients or not dosage_form or not route):
+            fallback_ingredients, fallback_dosage_form, fallback_route = (
+                  fallback_from_generic_name(fda_product.generic_name)
+            )
+            ingredients = ingredients or fallback_ingredients
+            dosage_form = dosage_form or fallback_dosage_form
+            route = route or fallback_route
 
       # This request is also intentionally outside the transaction.
       enrichment = get_rxnorm_enrichment(ndc)
@@ -379,8 +470,8 @@ def sync_product_from_external_sources (ndc: str) -> Product | None:
                   "brand_name": fda_product.brand_name,
                   "labeler": labeler,
                   "labeler_name": fda_product.labeler_name or "",
-                  "dosage_form": fda_product.dosage_form or "",
-                  "route": fda_product.route or [],
+                  "dosage_form": dosage_form,
+                  "route": route,
                   "active_ingredients": [ingredient.as_dict() for ingredient in ingredients],
             }
 

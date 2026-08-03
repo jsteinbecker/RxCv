@@ -38,6 +38,20 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/rxocrpl/db/rxnorm-export_2026-07-28/rxnorm-ndc.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/rxocrpl/db/rxnorm-export_2026-07-28/rxnorm-topics.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
       </map>
     </option>
   </component>

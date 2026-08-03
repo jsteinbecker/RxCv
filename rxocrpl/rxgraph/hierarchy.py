@@ -75,40 +75,40 @@ TTY_RANK = {
 # --- geometry (all values in SVG user units / px) ---
 CARD_W = 224
 CARD_H = 58
-CARD_VGAP = 12          # vertical gap between cards within a branch
-GROUP_HEADER_H = 26     # height reserved for a branch's rela heading
-GROUP_GAP = 30          # vertical gap between branches on the same side
+CARD_VGAP = 12  # vertical gap between cards within a branch
+GROUP_HEADER_H = 26  # height reserved for a branch's rela heading
+GROUP_GAP = 30  # vertical gap between branches on the same side
 HUB_W = 260
 HUB_H = 74
-BRANCH_GAP_X = 96       # horizontal gap between the hub edge and its cards
+BRANCH_GAP_X = 96  # horizontal gap between the hub edge and its cards
 BRANCH_COLUMN_GAP_X = 52
 MARGIN_X = 44
-MARGIN_TOP = 96         # room for the title / legend band
+MARGIN_TOP = 96  # room for the title / legend band
 MARGIN_BOTTOM = 44
-MAX_PER_BRANCH = 9      # cap cards per branch; the rest collapse to a "more" link
-MAX_HOPS = 2            # hops walked out from the hub on each side (hub + 2 + 2 = 5 columns wide)
-PRIMITIVE_W = 172       # compact size for dose-form-group (SCDG/SBDG) "primitive" cards
-PRIMITIVE_H = 40        # minimum; grows to fit a fully-wrapped, untruncated title
-TERMINAL_W = 196        # compact size for NDC product "terminal" (leaf) cards
-TERMINAL_H = 54         # minimum; grows to fit name + dosage form + labeler/NDC
-COMPACT_TOP_PAD = 15    # first label line's baseline, from the card's top edge
-COMPACT_LINE_H = 13     # vertical step between wrapped label lines
-COMPACT_ROW_GAP = 14    # vertical step from one text row to the next
+MAX_PER_BRANCH = 9  # cap cards per branch; the rest collapse to a "more" link
+MAX_HOPS = 2  # hops walked out from the hub on each side (hub + 2 + 2 = 5 columns wide)
+PRIMITIVE_W = 172  # compact size for dose-form-group (SCDG/SBDG) "primitive" cards
+PRIMITIVE_H = 40  # minimum; grows to fit a fully-wrapped, untruncated title
+TERMINAL_W = 196  # compact size for NDC product "terminal" (leaf) cards
+TERMINAL_H = 54  # minimum; grows to fit name + dosage form + labeler/NDC
+COMPACT_TOP_PAD = 15  # first label line's baseline, from the card's top edge
+COMPACT_LINE_H = 13  # vertical step between wrapped label lines
+COMPACT_ROW_GAP = 14  # vertical step from one text row to the next
 COMPACT_BOTTOM_PAD = 9  # padding below the last text row
 
 
-def _color_for(tty: str | None) -> str:
+def _color_for (tty: str | None) -> str:
       return TTY_COLORS.get(tty or "", DEFAULT_COLOR)
 
 
-def _short(name: str | None, limit: int = 46) -> str:
+def _short (name: str | None, limit: int = 46) -> str:
       if not name:
             return ""
       name = name.strip()
       return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
 
 
-def _wrap_text(value: str | None, width: int, max_lines: int | None) -> list[str]:
+def _wrap_text (value: str | None, width: int, max_lines: int | None) -> list[str]:
       """Word-wrap ``value``. With ``max_lines=None`` every line is kept (no
       truncation); otherwise lines beyond ``max_lines`` collapse into an
       ellipsis on the last kept line."""
@@ -136,39 +136,39 @@ class Card:
       y: float = 0.0
       w: float = CARD_W
       h: float = CARD_H
-      accent: str = ""          # optional right-aligned badge (e.g. TTY)
+      accent: str = ""  # optional right-aligned badge (e.g. TTY)
       is_more: bool = False
-      column: int = 1           # hop distance from the hub; each hop is its own column
+      column: int = 1  # hop distance from the hub; each hop is its own column
       hop: int = 1
       parent_rxcuis: list[str] = field(default_factory=list)  # cards this was reached through
-      sub2: str = ""            # second identifying line (terminal/product cards only)
-      ndc: str = ""             # product NDC, kept separate from `sub` for connector routing
+      sub2: str = ""  # second identifying line (terminal/product cards only)
+      ndc: str = ""  # product NDC, kept separate from `sub` for connector routing
 
       @property
-      def cx(self) -> float:
+      def cx (self) -> float:
             return self.x + self.w / 2
 
       @property
-      def cy(self) -> float:
+      def cy (self) -> float:
             return self.y + self.h / 2
 
       # --- appearance variants ---
       @property
-      def is_primitive(self) -> bool:
+      def is_primitive (self) -> bool:
             """Dose-form-group (SCDG/SBDG) cards get a compact "primitive" look."""
             return self.accent in ("SCDG", "SBDG")
 
       @property
-      def is_terminal(self) -> bool:
+      def is_terminal (self) -> bool:
             """NDC product cards get a compact "terminal" (leaf) look."""
             return self.accent == "NDC"
 
       @property
-      def is_compact(self) -> bool:
+      def is_compact (self) -> bool:
             return self.is_primitive or self.is_terminal
 
       @property
-      def node_id(self) -> str:
+      def node_id (self) -> str:
             """Stable id used to wire up hover highlighting; "" for cards that
             aren't a real graph node (e.g. pagination "more" cards)."""
             if self.is_more:
@@ -179,36 +179,36 @@ class Card:
 
       # --- text anchor helpers (keep the template arithmetic-free) ---
       @property
-      def text_x(self) -> float:
+      def text_x (self) -> float:
             return self.x + (12 if self.is_compact else 18)
 
       @property
-      def label_y(self) -> float:
+      def label_y (self) -> float:
             if self.is_compact:
                   return self.y + COMPACT_TOP_PAD
             return self.y + 17
 
       @property
-      def sub_y(self) -> float:
+      def sub_y (self) -> float:
             if self.is_compact:
                   n = len(self.label_lines)
                   return self.y + COMPACT_TOP_PAD + (n - 1) * COMPACT_LINE_H + COMPACT_ROW_GAP
             return self.y + 43
 
       @property
-      def sub2_y(self) -> float:
+      def sub2_y (self) -> float:
             return self.sub_y + COMPACT_ROW_GAP
 
       @property
-      def badge_x(self) -> float:
+      def badge_x (self) -> float:
             return self.x + self.w - 12
 
       @property
-      def badge_y(self) -> float:
+      def badge_y (self) -> float:
             return self.y + (11 if self.is_compact else 15)
 
       @property
-      def label_lines(self) -> list[str]:
+      def label_lines (self) -> list[str]:
             # Compact cards wrap the full title across as many lines as it
             # takes rather than truncating it -- see _fit_compact_height,
             # which grows the card to match.
@@ -219,13 +219,13 @@ class Card:
             return _wrap_text(self.label, width=30, max_lines=2)
 
       @property
-      def sub_lines(self) -> list[str]:
+      def sub_lines (self) -> list[str]:
             if self.is_compact:
                   return [_short(self.sub, 28)] if self.sub else [""]
             return _wrap_text(self.sub, width=34, max_lines=1)
 
       @property
-      def sub2_lines(self) -> list[str]:
+      def sub2_lines (self) -> list[str]:
             return [_short(self.sub2, 28)] if self.sub2 else [""]
 
 
@@ -235,12 +235,12 @@ class Branch:
 
       heading: str
       rank: int
-      side: str                 # "left" or "right"
+      side: str  # "left" or "right"
       cards: list[Card] = field(default_factory=list)
-      key: str = ""             # stable id for pagination ("<dir>:<rela>")
+      key: str = ""  # stable id for pagination ("<dir>:<rela>")
       column: int = 1
-      hx: float = 0.0           # heading anchor x
-      hy: float = 0.0           # heading anchor y
+      hx: float = 0.0  # heading anchor x
+      hy: float = 0.0  # heading anchor y
 
 
 @dataclass
@@ -249,24 +249,24 @@ class Connector:
 
       path: str
       color: str
-      to_hub: bool              # True => arrow points at the hub (inbound)
-      from_id: str = ""         # node_id of the edge's origin (hub uses "rx:<rxcui>")
-      to_id: str = ""           # node_id of the edge's destination
+      to_hub: bool  # True => arrow points at the hub (inbound)
+      from_id: str = ""  # node_id of the edge's origin (hub uses "rx:<rxcui>")
+      to_id: str = ""  # node_id of the edge's destination
 
 
-def _hierarchy_url(rxcui: str) -> str:
+def _hierarchy_url (rxcui: str) -> str:
       return reverse("admin:rxocrpl_rxnormconcept_hierarchy", args=[rxcui])
 
 
-def _concept_url(rxcui: str) -> str:
+def _concept_url (rxcui: str) -> str:
       return _hierarchy_url(rxcui)
 
 
-def _product_url(ndc: str) -> str:
+def _product_url (ndc: str) -> str:
       return reverse("admin:rxocrpl_product_change", args=[ndc])
 
 
-def _more_url(concept: "RxNormConcept", next_pages: dict[str, int]) -> str:
+def _more_url (concept: "RxNormConcept", next_pages: dict[str, int]) -> str:
       """URL that re-renders this same hierarchy with an advanced page cursor.
 
       The full paging state is carried in the query string so the link works
@@ -280,16 +280,16 @@ def _more_url(concept: "RxNormConcept", next_pages: dict[str, int]) -> str:
       return f"{base}?{urlencode({'pages': json.dumps(pages, separators=(',', ':'))})}"
 
 
-def _paginate(items: list, page: int) -> tuple[list, int, int]:
+def _paginate (items: list, page: int) -> tuple[list, int, int]:
       """Return ``(page_items, clamped_page, total_pages)`` for ``items``."""
       total_pages = max(1, (len(items) + MAX_PER_BRANCH - 1) // MAX_PER_BRANCH)
       if page < 0 or page >= total_pages:
             page = 0
       start = page * MAX_PER_BRANCH
-      return items[start : start + MAX_PER_BRANCH], page, total_pages
+      return items[start: start + MAX_PER_BRANCH], page, total_pages
 
 
-def _fit_compact_height(card: Card, minimum: float) -> float:
+def _fit_compact_height (card: Card, minimum: float) -> float:
       """Grow a compact card's height so its (untruncated, possibly
       multi-line) title and its trailing sub line(s) all fit without
       overlapping -- called once the card's final label/sub/sub2 are set."""
@@ -297,7 +297,7 @@ def _fit_compact_height(card: Card, minimum: float) -> float:
       return max(minimum, last_row_y - card.y + COMPACT_BOTTOM_PAD)
 
 
-def _more_card(
+def _more_card (
           concept: "RxNormConcept",
           pages: dict[str, int],
           key: str,
@@ -328,7 +328,7 @@ def _more_card(
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
-def _apply_implied_specificity(cards: list[Card]) -> None:
+def _apply_implied_specificity (cards: list[Card]) -> None:
       """Infer a narrower/broader relationship among sibling dose-form-group
       cards from name-token containment, and push the more specific siblings
       further out so the fan-out reflects the hierarchy the data model itself
@@ -361,7 +361,7 @@ def _apply_implied_specificity(cards: list[Card]) -> None:
                         break
             token_sets = {c: frozenset(t[prefix_len:]) for c, t in token_lists.items()}
 
-            def parents_of(card: Card) -> list[Card]:
+            def parents_of (card: Card) -> list[Card]:
                   ts = token_sets[card]
                   if not ts:
                         return []
@@ -376,7 +376,7 @@ def _apply_implied_specificity(cards: list[Card]) -> None:
 
             depth_memo: dict[str, int] = {}
 
-            def depth_of(card: Card) -> int:
+            def depth_of (card: Card) -> int:
                   if card.sub in depth_memo:
                         return depth_memo[card.sub]
                   parents = parents_of(card)
@@ -397,7 +397,7 @@ def _apply_implied_specificity(cards: list[Card]) -> None:
             cards.sort(key=lambda c: (depths.get(c.sub, c.column), c.label.lower()))
 
 
-def _collect_branches(
+def _collect_branches (
           concept: "RxNormConcept", pages: dict[str, int]
 ) -> tuple[list[Branch], set[str]]:
       """Walk the anchor's relation graph outward into per-``rela`` branches.
@@ -502,7 +502,7 @@ def _collect_branches(
                         _apply_implied_specificity(cards)
                         if total_pages > 1:
                               remaining = len(entries) - (
-                                    page * MAX_PER_BRANCH + len(page_entries)
+                                        page * MAX_PER_BRANCH + len(page_entries)
                               )
                               cards.append(
                                     _more_card(
@@ -527,7 +527,7 @@ def _collect_branches(
       return left + right, ego_rxcuis
 
 
-def _collect_product_branch(
+def _collect_product_branch (
           concept: "RxNormConcept", ego_rxcuis: set[str], pages: dict[str, int]
 ) -> tuple[Branch | None, dict[str, str], int]:
       """Build the "NDC products" branch from confirmed RxCUI->NDC mappings.
@@ -548,6 +548,8 @@ def _collect_product_branch(
       )
       if not mappings:
             return None, {}, 0
+
+      total_products = len({m.product_ndc for m in mappings})
 
       products = Product.objects.in_bulk(
             [m.product_ndc for m in mappings], field_name="product_ndc"
@@ -604,7 +606,7 @@ def _collect_product_branch(
       return branch, ndc_to_rxcui, total_products
 
 
-def _branch_column_runs(branch: Branch) -> list[tuple[int, list[Card]]]:
+def _branch_column_runs (branch: Branch) -> list[tuple[int, list[Card]]]:
       """Split a branch's cards into contiguous same-column runs.
 
       Cards are pre-sorted by column (see ``_apply_implied_specificity``), so
@@ -626,18 +628,18 @@ def _branch_column_runs(branch: Branch) -> list[tuple[int, list[Card]]]:
       return runs
 
 
-def _run_height(cards: list[Card], has_heading: bool) -> float:
+def _run_height (cards: list[Card], has_heading: bool) -> float:
       n = len(cards)
       if n == 0:
             return GROUP_HEADER_H if has_heading else 0.0
       return (
-            (GROUP_HEADER_H if has_heading else 0.0)
-            + sum(card.h for card in cards)
-            + (n - 1) * CARD_VGAP
+                (GROUP_HEADER_H if has_heading else 0.0)
+                + sum(card.h for card in cards)
+                + (n - 1) * CARD_VGAP
       )
 
 
-def _side_columns(
+def _side_columns (
           side: list[Branch]
 ) -> dict[int, list[tuple[Branch, list[Card]]]]:
       """Group a side's branch content by rendered column.
@@ -654,7 +656,7 @@ def _side_columns(
       return columns
 
 
-def _column_height(runs: list[tuple[Branch, list[Card]]]) -> float:
+def _column_height (runs: list[tuple[Branch, list[Card]]]) -> float:
       if not runs:
             return 0.0
       total = 0.0
@@ -666,7 +668,7 @@ def _column_height(runs: list[tuple[Branch, list[Card]]]) -> float:
       return total
 
 
-def _bezier(sx: float, sy: float, ex: float, ey: float) -> str:
+def _bezier (sx: float, sy: float, ex: float, ey: float) -> str:
       """Horizontal-ish cubic bezier between two points."""
       dx = max(40.0, abs(ex - sx) * 0.5)
       c1x = sx + (dx if ex >= sx else -dx)
@@ -674,7 +676,7 @@ def _bezier(sx: float, sy: float, ex: float, ey: float) -> str:
       return f"M {sx:.1f} {sy:.1f} C {c1x:.1f} {sy:.1f} {c2x:.1f} {ey:.1f} {ex:.1f} {ey:.1f}"
 
 
-def build_hierarchy(
+def build_hierarchy (
           concept: "RxNormConcept", pages: dict[str, int] | None = None
 ) -> dict:
       """Compute the full positioned diagram for ``concept``.
@@ -707,7 +709,7 @@ def build_hierarchy(
       left = [b for b in branches if b.side == "left"]
       right = [b for b in branches if b.side == "right"]
 
-      def side_height(side: list[Branch]) -> float:
+      def side_height (side: list[Branch]) -> float:
             columns = _side_columns(side)
             if not columns:
                   return 0.0
@@ -721,17 +723,17 @@ def build_hierarchy(
       # BRANCH_GAP_X beyond each edge, one column per hop walked (a card's own
       # column can run deeper than its branch's base column when an implied
       # sub-hierarchy pushed it further out -- see _apply_implied_specificity).
-      def side_extent(side: list[Branch]) -> float:
+      def side_extent (side: list[Branch]) -> float:
             columns = max(
                   (card.column for b in side for card in b.cards), default=0
             )
             if not columns:
                   return HUB_W / 2
             return (
-                  HUB_W / 2
-                  + BRANCH_GAP_X
-                  + columns * CARD_W
-                  + max(0, columns - 1) * BRANCH_COLUMN_GAP_X
+                      HUB_W / 2
+                      + BRANCH_GAP_X
+                      + columns * CARD_W
+                      + max(0, columns - 1) * BRANCH_COLUMN_GAP_X
             )
 
       left_extent = side_extent(left)
@@ -760,7 +762,7 @@ def build_hierarchy(
       connectors: list[Connector] = []
       rxcui_card_pos: dict[str, tuple[float, float]] = {}
 
-      def place_side(side: list[Branch], is_left: bool) -> None:
+      def place_side (side: list[Branch], is_left: bool) -> None:
             # Each column gets its own vertical cursor, centred independently,
             # so a column further from the hub packs tightly instead of
             # starting below the unrelated content of a nearer column.
@@ -772,17 +774,17 @@ def build_hierarchy(
                               branch.hy = y + GROUP_HEADER_H - 8
                               if is_left:
                                     branch.hx = (
-                                          center_x
-                                          - HUB_W / 2
-                                          - BRANCH_GAP_X
-                                          - (branch.column - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
+                                              center_x
+                                              - HUB_W / 2
+                                              - BRANCH_GAP_X
+                                              - (branch.column - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
                                     )  # right-align heading against its base column
                               else:
                                     branch.hx = (
-                                          center_x
-                                          + HUB_W / 2
-                                          + BRANCH_GAP_X
-                                          + (branch.column - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
+                                              center_x
+                                              + HUB_W / 2
+                                              + BRANCH_GAP_X
+                                              + (branch.column - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
                                     )
                               cy = y + GROUP_HEADER_H
                         else:
@@ -791,11 +793,11 @@ def build_hierarchy(
                         for card in cards_in_run:
                               if is_left:
                                     slot_x = (
-                                          center_x
-                                          - HUB_W / 2
-                                          - BRANCH_GAP_X
-                                          - col * CARD_W
-                                          - (col - 1) * BRANCH_COLUMN_GAP_X
+                                              center_x
+                                              - HUB_W / 2
+                                              - BRANCH_GAP_X
+                                              - col * CARD_W
+                                              - (col - 1) * BRANCH_COLUMN_GAP_X
                                     )
                                     # keep the inner (hub-facing) edge flush
                                     # regardless of the card's own (possibly
@@ -803,10 +805,10 @@ def build_hierarchy(
                                     card.x = slot_x + (CARD_W - card.w)
                               else:
                                     card.x = (
-                                          center_x
-                                          + HUB_W / 2
-                                          + BRANCH_GAP_X
-                                          + (col - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
+                                              center_x
+                                              + HUB_W / 2
+                                              + BRANCH_GAP_X
+                                              + (col - 1) * (CARD_W + BRANCH_COLUMN_GAP_X)
                                     )
                               card.y = cy
                               cy += card.h + CARD_VGAP

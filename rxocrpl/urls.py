@@ -1,26 +1,34 @@
-from django.urls import path
-from django.urls import include
+from django.urls import include, path
+
 from . import views
 
 app_name = 'rxocrpl'
 
 urlpatterns = [
-      path('', views.index, name='index'),
+      path('', views.IndexView.as_view(), name='index'),
       path('api/', include(('rxocrpl.api.urls', 'rxocrpl_api'), namespace='rxocrpl_api')),
-      path('stats/', views.stats, name='stats'),
-      path('products-without-ingredients/', views.products_without_ingredients_view, name='products_without_ingredients'),
-      path('concept/<str:rxcui>/graph/', views.concept_graph_view, name='concept_graph'),
-      path('concept/<str:rxcui>/sync/', views.sync_concept_from_rxnorm, name='sync_concept'),
-      path('concept/link-quantified-scds/', views.quantified_form_enrichment, name='quantified_form_enrichment'),
-      path('tty/<str:tty>/', views.concept_tty_list_view, name='concept_tty_list'),
-      path('ndc/data/loadall/', views.import_all_ndc_products, name='import_all_ndc_products'),
-      path('ndc/data/loadpkg/', views.import_all_packages, name='import_all_packages'),
-      path('ndc/data/loadingredients/', views.ingredients_dict_to_model, name='import_all_ingredients'),
-      path('ndc/', views.ndc_product_list_view, name='ndc_product_list'),
-      path('ndc/<str:ndc>/', views.ndc_product_detail_view, name='ndc_product_detail'),
-      path('labeler/', views.labeler_list_view, name='labeler_list'),
-      path('labeler/classify/', views.labeler_classifier_view, name='labeler_classifier'),
-      path('labeler/<str:labeler_code>/', views.labeler_detail_view, name='labeler_detail'),
-      path('facility/', views.facility_list_view, name='facility_list'),
-      path('facility/<int:pk>/claim/', views.claim_facility_view, name='facility_claim'),
+      path('stats/', views.SiteStatsView.as_view(), name='stats'),
+
+      path('products-without-ingredients/', views.ProductsWithoutIngredientsView.as_view(), name='products_without_ingredients'),
+      path('products-without-ingredients/repair/', views.RepairProductsWithoutIngredientsView.as_view(),
+           name='repair_products_without_ingredients'),
+
+      path('concept/<str:rxcui>/graph/', views.ConceptGraphView.as_view(), name='concept_graph'),
+      path('concept/<str:rxcui>/sync/', views.SyncConceptFromRxNormView.as_view(), name='sync_concept'),
+      path('concept/link-quantified-scds/', views.QuantifiedFormEnrichmentView.as_view(), name='quantified_form_enrichment'),
+      path('concept/update_collected_concept_data/', views.ConceptCollectedDataUpdateView.as_view(), name='update_collected_concept_data'),
+      path('tty/<str:tty>/', views.ConceptTtyListView.as_view(), name='concept_tty_list'),
+
+      path('ndc/data/loadall/', views.ImportNdcProductsView.as_view(), name='import_all_ndc_products'),
+      path('ndc/data/loadpkg/', views.ImportPackagesView.as_view(), name='import_all_packages'),
+      path('ndc/data/loadingredients/', views.IngredientsDictToModelView.as_view(), name='import_all_ingredients'),
+      path('ndc/', views.NdcProductListView.as_view(), name='ndc_product_list'),
+      path('ndc/<str:ndc>/', views.NdcProductDetailView.as_view(), name='ndc_product_detail'),
+
+      path('labeler/', views.LabelerListView.as_view(), name='labeler_list'),
+      path('labeler/classify/', views.LabelerClassifierView.as_view(), name='labeler_classifier'),
+      path('labeler/<str:labeler_code>/', views.LabelerDetailView.as_view(), name='labeler_detail'),
+
+      path('facility/', views.FacilityListView.as_view(), name='facility_list'),
+      path('facility/<int:pk>/claim/', views.ClaimFacilityView.as_view(), name='facility_claim'),
 ]

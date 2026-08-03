@@ -17,29 +17,44 @@
             <p style="font-size: 2rem; font-weight: 700; margin: 0.5rem 0;">{{ total_concepts }}</p>
             <p style="color: var(--fg-muted); font-size: 0.85rem;">{{ total_relations }} relations</p>
             <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 1rem;">
-                <a href="{% url 'rxocrpl:concept_tty_list' 'SCD' %}" style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Semantic Clinical Drugs (SCD)</a>
-                <a href="{% url 'rxocrpl:concept_tty_list' 'SBD' %}" style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Semantic Branded Drugs (SBD)</a>
-                <a href="{% url 'rxocrpl:concept_tty_list' 'IN' %}" style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Ingredients (IN)</a>
+                <a href="{% url 'rxocrpl:concept_tty_list' 'SCD' %}"
+                   style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Semantic Clinical Drugs
+                    (SCD)</a>
+                <a href="{% url 'rxocrpl:concept_tty_list' 'SBD' %}"
+                   style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Semantic Branded Drugs
+                    (SBD)</a>
+                <a href="{% url 'rxocrpl:concept_tty_list' 'IN' %}"
+                   style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Ingredients (IN)</a>
             </div>
         </div>
 
         <div class="card">
             <h3 style="margin-top: 0;">NDC Products</h3>
             <p style="font-size: 2rem; font-weight: 700; margin: 0.5rem 0;">{{ total_products }}</p>
-            <p style="color: var(--fg-muted); font-size: 0.85rem;">{{ total_ingredients }} listed ingredients · {{ total_packages }} packages</p>
+            <p style="color: var(--fg-muted); font-size: 0.85rem;">{{ total_ingredients }} listed ingredients
+                · {{ total_packages }} packages</p>
             <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 1rem;">
-                <a href="{% url 'rxocrpl:ndc_product_list' %}" style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Browse All Products</a>
-                <a href="{% url 'rxocrpl:labeler_list' %}" style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Browse Labelers</a>
+                <a href="{% url 'rxocrpl:ndc_product_list' %}"
+                   style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Browse All Products</a>
+                <a href="{% url 'rxocrpl:labeler_list' %}"
+                   style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Browse Labelers</a>
             </div>
         </div>
 
         <div class="card">
             <h3 style="margin-top: 0;">Administration</h3>
             <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 0.5rem;">
-                <a href="{% url 'admin:index' %}" style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Django Admin</a>
-                <a href="{% url 'rxocrpl:import_all_ndc_products' %}" style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">→ Reload NDC Products</a>
-                <a href="{% url 'rxocrpl:import_all_packages' %}" style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">→ Reload Packages</a>
-                <a href="{% url 'rxocrpl:import_all_ingredients' %}" style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">→ Sync Ingredients</a>
+                <a href="{% url 'admin:index' %}"
+                   style="color: var(--brand); text-decoration: none; font-size: 0.9rem;">→ Django Admin</a>
+                <a href="{% url 'rxocrpl:update_collected_concept_data' %}"
+                   style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">
+                    → Update Collected Concept Data</a>
+                <a href="{% url 'rxocrpl:import_all_ndc_products' %}"
+                   style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">→ Reload NDC Products</a>
+                <a href="{% url 'rxocrpl:import_all_packages' %}"
+                   style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">→ Reload Packages</a>
+                <a href="{% url 'rxocrpl:import_all_ingredients' %}"
+                   style="color: var(--fg-muted); text-decoration: none; font-size: 0.9rem;">→ Sync Ingredients</a>
             </div>
         </div>
     </div>

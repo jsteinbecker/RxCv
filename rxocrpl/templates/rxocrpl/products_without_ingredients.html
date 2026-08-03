@@ -7,6 +7,9 @@
         <h1>Products Without Ingredients</h1>
         {% if products %}
             <p>The following products do not have any associated ingredients:</p>
+            <a href="{% url 'rxocrpl:repair_products_without_ingredients' %}" class="btn btn-primary mb-3">Repair
+                Products
+            </a>
             <ul>
                 {% for product in products %}
                     <li>

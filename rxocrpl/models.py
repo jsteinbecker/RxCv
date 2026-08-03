@@ -423,7 +423,8 @@ class Product(ComputedFieldsModel):
                         names.add(name)
             return frozenset(names)
 
-      def _dose_form_matches (self, concept: "RxNormConcept", rxnorm_dose_form: str) -> bool:
+      @staticmethod
+      def _dose_form_matches (concept: "RxNormConcept", rxnorm_dose_form: str) -> bool:
             parsed = concept.parsed()
             return bool(parsed and parsed.dose_form and parsed.dose_form.lower() == rxnorm_dose_form.lower())
 
@@ -528,7 +529,7 @@ class Product(ComputedFieldsModel):
                   brand_name
                   for brand_name, generic_name, ingredients in candidates
                   if brand_name.strip().upper() != (generic_name or "").strip().upper()
-                  and self._ingredient_name_set(ingredients) == self_names
+                     and self._ingredient_name_set(ingredients) == self_names
             }
             return " && ".join(sorted(brands))
 
@@ -789,7 +790,7 @@ class Facility(models.Model):
 
       name = models.CharField(max_length=255)
       organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="facilities",
-                                       null=True, blank=True,)
+                                       null=True, blank=True, )
       parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
       facility_type = models.CharField(max_length=100, null=True, blank=True)
       org = models.CharField(max_length=255, null=True, blank=True, help_text="Legacy organization field")
@@ -829,13 +830,13 @@ class RoleGrant(models.Model):
       organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=True)
       facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
       granted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                     related_name="granted_permissions",)
+                                     related_name="granted_permissions", )
       granted_at = models.DateTimeField(auto_now_add=True)
       revoked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                     related_name="revoked_permissions",)
+                                     related_name="revoked_permissions", )
       revoked_at = models.DateTimeField(null=True, blank=True)
       expires_at = models.DateTimeField(null=True, blank=True, help_text="Optional, for time-boxed elevated access")
-      reason = models.TextField(blank=True, help_text="Optional. Must be 'system_bootstrap' when granted_by is null.",)
+      reason = models.TextField(blank=True, help_text="Optional. Must be 'system_bootstrap' when granted_by is null.", )
 
       class Meta:
             constraints = [
